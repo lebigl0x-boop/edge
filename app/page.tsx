@@ -10,6 +10,8 @@ const AnalyticsTab = lazy(() => import('@/components/AnalyticsTab'))
 interface Stats {
   total: number; totalPnl: number; wins: number; losses: number
   aplus: number; avgPnl: number; winRate: number
+  disciplineScore: number; slRespectRate: number; slHitRate: number
+  errorRate: number; aplusRate: number; rrReel: number | null
 }
 
 const FR_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
@@ -147,14 +149,23 @@ export default function Dashboard() {
 
       {/* Stats cards */}
       {stats && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 28 }}>
-          <StatCard label="PnL Total" value={`${stats.totalPnl >= 0 ? '+' : ''}${fmt(stats.totalPnl)} SOL`} color={stats.totalPnl >= 0 ? '#30d158' : '#ff453a'} />
-          <StatCard label="Win Rate" value={`${fmt(stats.winRate, 0)}%`} color={stats.winRate >= 50 ? '#30d158' : '#ff453a'} />
-          <StatCard label="Trades" value={String(stats.total)} />
-          <StatCard label="Wins" value={String(stats.wins)} color="#30d158" />
-          <StatCard label="Losses" value={String(stats.losses)} color="#ff453a" />
-          <StatCard label="A+ Trades" value={String(stats.aplus)} color="#bf5af2" />
-          <StatCard label="Moy. PnL" value={`${stats.avgPnl >= 0 ? '+' : ''}${fmt(stats.avgPnl)} SOL`} color={stats.avgPnl >= 0 ? '#30d158' : '#ff453a'} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
+          {/* Performance */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+            <StatCard label="PnL Total" value={`${stats.totalPnl >= 0 ? '+' : ''}${fmt(stats.totalPnl)} SOL`} color={stats.totalPnl >= 0 ? '#30d158' : '#ff453a'} />
+            <StatCard label="Win Rate" value={`${fmt(stats.winRate, 0)}%`} color={stats.winRate >= 50 ? '#30d158' : '#ff453a'} hint="cible > 50%" />
+            <StatCard label="RR Réel" value={stats.rrReel !== null ? `${fmt(stats.rrReel, 2)}x` : '—'} color={stats.rrReel !== null ? (stats.rrReel >= 2 ? '#30d158' : stats.rrReel >= 1 ? '#ff9f0a' : '#ff453a') : undefined} hint="cible > 2x" />
+            <StatCard label="Moy. PnL" value={`${stats.avgPnl >= 0 ? '+' : ''}${fmt(stats.avgPnl)} SOL`} color={stats.avgPnl >= 0 ? '#30d158' : '#ff453a'} />
+            <StatCard label="Trades" value={`${stats.total} (${stats.wins}W / ${stats.losses}L)`} />
+          </div>
+          {/* Discipline */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+            <StatCard label="Discipline" value={`${fmt(stats.disciplineScore, 0)}%`} color={stats.disciplineScore >= 80 ? '#30d158' : stats.disciplineScore >= 60 ? '#ff9f0a' : '#ff453a'} hint="cible > 80%" accent />
+            <StatCard label="SL Respect" value={`${fmt(stats.slRespectRate, 0)}%`} color={stats.slRespectRate >= 90 ? '#30d158' : stats.slRespectRate >= 70 ? '#ff9f0a' : '#ff453a'} hint="cible > 90%" accent />
+            <StatCard label="SL Hit Rate" value={`${fmt(stats.slHitRate, 0)}%`} color={stats.slHitRate <= 30 ? '#30d158' : stats.slHitRate <= 50 ? '#ff9f0a' : '#ff453a'} hint="cible < 30%" accent />
+            <StatCard label="Error Rate" value={`${fmt(stats.errorRate, 0)}%`} color={stats.errorRate <= 20 ? '#30d158' : stats.errorRate <= 40 ? '#ff9f0a' : '#ff453a'} hint="cible < 20%" accent />
+            <StatCard label="A+ Rate" value={`${fmt(stats.aplusRate, 0)}%`} color={stats.aplusRate >= 30 ? '#30d158' : '#ff9f0a'} hint="cible > 30%" accent />
+          </div>
         </div>
       )}
 
@@ -244,15 +255,18 @@ export default function Dashboard() {
   )
 }
 
-function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
+function StatCard({ label, value, color, hint, accent }: { label: string; value: string; color?: string; hint?: string; accent?: boolean }) {
   return (
-    <div className="stat-card">
+    <div className="stat-card" style={accent ? { background: 'rgba(255,255,255,0.04)' } : undefined}>
       <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
         {label}
       </div>
       <div style={{ fontSize: '1.15rem', fontWeight: 700, color: color ?? 'white', fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </div>
+      {hint && (
+        <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>{hint}</div>
+      )}
     </div>
   )
 }

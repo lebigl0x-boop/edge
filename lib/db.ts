@@ -146,18 +146,18 @@ export async function deleteTrade(id: number) {
 
 export async function getStats(filter?: string) {
   const sql = getSql()
-  // Fetch minimal data and compute in JS (simple + safe)
+  const cols = sql`SELECT pnl_sol, trade_aplus, r1_respectee, r2_respectee, r3_respectee, r4_respectee, sl_touche, erreur`
   let rows
   if (!filter || filter === 'all') {
-    rows = await sql`SELECT pnl_sol, trade_aplus FROM trades`
+    rows = await sql`${cols} FROM trades`
   } else if (filter === 'week') {
-    rows = await sql`SELECT pnl_sol, trade_aplus FROM trades WHERE date >= TO_CHAR(NOW() - INTERVAL '7 days', 'YYYY-MM-DD')`
+    rows = await sql`${cols} FROM trades WHERE date >= TO_CHAR(NOW() - INTERVAL '7 days', 'YYYY-MM-DD')`
   } else if (filter === 'month') {
-    rows = await sql`SELECT pnl_sol, trade_aplus FROM trades WHERE date >= TO_CHAR(DATE_TRUNC('month', NOW()), 'YYYY-MM-DD')`
+    rows = await sql`${cols} FROM trades WHERE date >= TO_CHAR(DATE_TRUNC('month', NOW()), 'YYYY-MM-DD')`
   } else if (/^\d{4}-\d{2}$/.test(filter)) {
-    rows = await sql`SELECT pnl_sol, trade_aplus FROM trades WHERE date LIKE ${filter + '-%'}`
+    rows = await sql`${cols} FROM trades WHERE date LIKE ${filter + '-%'}`
   } else {
-    rows = await sql`SELECT pnl_sol, trade_aplus FROM trades`
+    rows = await sql`${cols} FROM trades`
   }
 
   const total = rows.length
@@ -165,14 +165,28 @@ export async function getStats(filter?: string) {
   const wins = rows.filter(r => Number(r.pnl_sol) > 0).length
   const losses = rows.filter(r => Number(r.pnl_sol) < 0).length
   const aplus = rows.filter(r => r.trade_aplus).length
+
+  // KPIs discipline
+  const disciplineScore = total > 0
+    ? rows.reduce((s, r) => s + [r.r1_respectee, r.r2_respectee, r.r3_respectee, r.r4_respectee].filter(Boolean).length / 4, 0) / total * 100
+    : 0
+  const slRespectRate = total > 0 ? rows.filter(r => r.r4_respectee).length / total * 100 : 0
+  const slHitRate = total > 0 ? rows.filter(r => r.sl_touche).length / total * 100 : 0
+  const errorRate = total > 0 ? rows.filter(r => r.erreur && r.erreur !== 'Aucune').length / total * 100 : 0
+  const aplusRate = total > 0 ? aplus / total * 100 : 0
+
+  // RR Réel
+  const winPnls = rows.filter(r => Number(r.pnl_sol) > 0).map(r => Number(r.pnl_sol))
+  const lossPnls = rows.filter(r => Number(r.pnl_sol) < 0).map(r => Number(r.pnl_sol))
+  const avgWin = winPnls.length > 0 ? winPnls.reduce((s, v) => s + v, 0) / winPnls.length : 0
+  const avgLoss = lossPnls.length > 0 ? Math.abs(lossPnls.reduce((s, v) => s + v, 0) / lossPnls.length) : 0
+  const rrReel = avgLoss > 0 ? avgWin / avgLoss : null
+
   return {
-    total,
-    totalPnl,
-    wins,
-    losses,
-    aplus,
+    total, totalPnl, wins, losses, aplus,
     avgPnl: total > 0 ? totalPnl / total : 0,
     winRate: total > 0 ? (wins / total) * 100 : 0,
+    disciplineScore, slRespectRate, slHitRate, errorRate, aplusRate, rrReel,
   }
 }
 
