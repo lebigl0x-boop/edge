@@ -1,8 +1,9 @@
 export type TradeType = 'Early' | 'Breakout' | 'Momentum' | 'Rotation'
 export type QualityABC = 'A' | 'B' | 'C'
 export type Slippage = 'faible' | 'ok' | 'élevé'
-export type MarcheGlobal = 'bull' | 'neutre' | 'mort'
+export type MarcheGlobal = 'bull' | 'neutre' | 'mort' | 'Bull' | 'Neutre' | 'Mort'
 export type Erreur =
+  | 'Aucune'
   | 'FOMO'
   | 'Overtrade'
   | 'Mauvaise narrative'
