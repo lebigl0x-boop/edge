@@ -29,15 +29,23 @@ function PnlCell({ val }: { val: number | null }) {
   return <span style={{ color: c, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{val > 0 ? '+' : ''}{fmt(val)} SOL</span>
 }
 
-function QBadge({ val }: { val: string | null }) {
+function ConvictionBadge({ val }: { val: string | null }) {
   if (!val) return <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>
-  return <span className={`badge badge-${val}`}>{val}</span>
+  const map: Record<string, { label: string; color: string }> = {
+    A: { label: 'Forte', color: '#30d158' },
+    B: { label: 'Moyenne', color: '#ff9f0a' },
+    C: { label: 'Faible', color: '#ff453a' },
+  }
+  const m = map[val]
+  if (!m) return <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>
+  return <span style={{ fontSize: '0.72rem', fontWeight: 600, color: m.color }}>{m.label}</span>
 }
 
 function MarcheIcon({ val }: { val: string | null }) {
-  if (val === 'bull') return <span title="Bull actif" style={{ fontSize: 11 }}>🔥</span>
-  if (val === 'neutre') return <span title="Neutre" style={{ fontSize: 11 }}>😐</span>
-  if (val === 'mort') return <span title="Mort" style={{ fontSize: 11 }}>❄️</span>
+  const v = val?.toLowerCase()
+  if (v === 'bull') return <span title="Bull actif" style={{ fontSize: 11 }}>🔥</span>
+  if (v === 'neutre') return <span title="Neutre" style={{ fontSize: 11 }}>😐</span>
+  if (v === 'mort') return <span title="Mort" style={{ fontSize: 11 }}>❄️</span>
   return null
 }
 
@@ -173,11 +181,11 @@ export default function Dashboard() {
             {/* Header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '80px 1fr 120px 100px 52px 52px 90px',
+              gridTemplateColumns: '80px 1fr 120px 100px 80px 90px',
               gap: 10, padding: '10px 20px',
               borderBottom: '1px solid rgba(255,255,255,0.06)',
             }}>
-              {['Date', 'Token', 'PnL', 'MC Entrée', 'In', 'Out', 'Type'].map(h => (
+              {['Date', 'Token', 'PnL', 'MC Entrée', 'Conv.', 'Type'].map(h => (
                 <span key={h} style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>
                   {h}
                 </span>
@@ -215,8 +223,7 @@ export default function Dashboard() {
                 </div>
                 <PnlCell val={t.pnl_sol} />
                 <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>{formatMC(t.market_cap_entree)}</span>
-                <QBadge val={t.entry_qualite} />
-                <QBadge val={t.exit_qualite} />
+                <ConvictionBadge val={t.entry_qualite} />
                 {t.type_trade ? (
                   <span className="badge" style={{ background: 'rgba(10,132,255,0.1)', color: '#0a84ff', fontSize: '0.65rem' }}>{t.type_trade}</span>
                 ) : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>—</span>}

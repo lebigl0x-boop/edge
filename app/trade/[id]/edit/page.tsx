@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import type { Trade } from '@/types/trade'
 
 type Val = string | number | boolean | null
 
 function useForm(init: Record<string, Val>) {
   const [form, setForm] = useState(init)
   const set = (key: string, val: Val) => setForm(p => ({ ...p, [key]: val }))
-  return { form, set }
+  return { form, set, setAll: setForm }
 }
 
 function Pills({ options, value, onChange, colorClass }: {
@@ -68,43 +69,64 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const convictionMap: Record<string, string> = { Forte: 'A', Moyenne: 'B', Faible: 'C' }
 const FEES_KEY = 'edge_fees'
-const today = new Date().toISOString().slice(0, 10)
-const nowTime = new Date().toTimeString().slice(0, 5)
 
-export default function NouveauTrade() {
+const EMPTY: Record<string, Val> = {
+  date: '', heure_entree: '', token: '',
+  market_cap_entree: '', market_cap_sortie: '',
+  taille: '', pnl_sol: '', type_trade: '',
+  meme_narrative: '', entry_qualite: '', marche_global: '',
+  r1_respectee: false, r2_respectee: false, r3_respectee: false, r4_respectee: false,
+  sl_touche: false, coupe_bon_moment: false, coin_lent: false,
+  erreur: '', erreur_autre: '', trade_aplus: false, bien_fait: '',
+}
+
+export default function EditTrade() {
+  const { id } = useParams()
   const router = useRouter()
   const [saving, setSaving] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [fees, setFees] = useState({ prio: 0.001, tip: 0.001 })
+  const { form, set, setAll } = useForm(EMPTY)
 
   useEffect(() => {
     const saved = localStorage.getItem(FEES_KEY)
     if (saved) { try { setFees(JSON.parse(saved)) } catch {} }
   }, [])
 
-  const { form, set } = useForm({
-    date: today,
-    heure_entree: nowTime,
-    token: '',
-    market_cap_entree: '',  // stored in k$, multiplied ×1000 on submit
-    market_cap_sortie: '',  // stored in k$, multiplied ×1000 on submit
-    taille: '',
-    pnl_sol: '',
-    type_trade: '',
-    meme_narrative: '',
-    entry_qualite: '',      // A/B/C from conviction
-    marche_global: '',
-    r1_respectee: false,
-    r2_respectee: false,
-    r3_respectee: false,
-    r4_respectee: false,
-    sl_touche: false,
-    coupe_bon_moment: false,
-    coin_lent: false,
-    erreur: '',
-    erreur_autre: '',
-    trade_aplus: false,
-    bien_fait: '',
-  })
+  // Load existing trade
+  useEffect(() => {
+    fetch(`/api/trades/${id}`)
+      .then(r => r.json())
+      .then((t: Trade) => {
+        setAll({
+          date: t.date ?? '',
+          heure_entree: t.heure_entree ?? '',
+          token: t.token ?? '',
+          // MC stored as full $, display in k$
+          market_cap_entree: t.market_cap_entree != null ? String(t.market_cap_entree / 1000) : '',
+          market_cap_sortie: t.market_cap_sortie != null ? String(t.market_cap_sortie / 1000) : '',
+          taille: t.taille != null ? String(t.taille) : '',
+          pnl_sol: t.pnl_sol != null ? String(t.pnl_sol) : '',
+          type_trade: t.type_trade ?? '',
+          meme_narrative: t.meme_narrative ?? '',
+          entry_qualite: t.entry_qualite ?? '',
+          marche_global: t.marche_global ?? '',
+          r1_respectee: Boolean(t.r1_respectee),
+          r2_respectee: Boolean(t.r2_respectee),
+          r3_respectee: Boolean(t.r3_respectee),
+          r4_respectee: Boolean(t.r4_respectee),
+          sl_touche: Boolean(t.sl_touche),
+          coupe_bon_moment: Boolean(t.coupe_bon_moment),
+          coin_lent: Boolean(t.coin_lent),
+          erreur: t.erreur ?? '',
+          erreur_autre: t.erreur_autre ?? '',
+          trade_aplus: Boolean(t.trade_aplus),
+          bien_fait: t.bien_fait ?? '',
+        })
+        pnlManual.current = true // don't auto-override loaded PnL
+        setLoaded(true)
+      })
+  }, [id])
 
   const { autoPct, autoPnlSol } = useMemo(() => {
     const mcE = parseFloat(form.market_cap_entree as string)
@@ -114,20 +136,14 @@ export default function NouveauTrade() {
     const pct = ((mcS - mcE) / mcE) * 100
     if (isNaN(taille) || taille <= 0) return { autoPct: pct, autoPnlSol: null }
     const totalFees = (fees.prio + fees.tip) * 2
-    const sol = taille * (mcS - mcE) / mcE - totalFees
-    return { autoPct: pct, autoPnlSol: sol }
+    return { autoPct: pct, autoPnlSol: taille * (mcS - mcE) / mcE - totalFees }
   }, [form.market_cap_entree, form.market_cap_sortie, form.taille, fees])
 
   const convictionLabel = Object.entries(convictionMap).find(([, v]) => v === form.entry_qualite)?.[0] ?? ''
+  const pnlManual = useRef(true)
   const NUM_FIELDS = ['market_cap_entree', 'market_cap_sortie', 'taille', 'pnl_sol']
-
-  // Auto-populate pnl_sol from calculation unless user has manually edited it
-  const pnlManual = useRef(false)
-  useEffect(() => {
-    if (!pnlManual.current && autoPnlSol !== null) {
-      set('pnl_sol', String(Math.round(autoPnlSol * 1000) / 1000))
-    }
-  }, [autoPnlSol])
+  const totalFees = (fees.prio + fees.tip) * 2
+  const hasPnlPreview = autoPct !== null || autoPnlSol !== null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -139,15 +155,12 @@ export default function NouveauTrade() {
         if (NUM_FIELDS.includes(k)) {
           const n = parseFloat(v as string)
           if (!isNaN(n)) {
-            // MC fields entered in k$, convert to full $
             payload[k] = (k === 'market_cap_entree' || k === 'market_cap_sortie') ? n * 1000 : n
           }
         } else {
           payload[k] = v
         }
       }
-      payload.date = form.date || today
-      // Auto-fill calculated values if not manually entered
       if (!payload.pnl_sol && autoPnlSol !== null) {
         payload.pnl_sol = Math.round(autoPnlSol * 1000) / 1000
       }
@@ -155,25 +168,28 @@ export default function NouveauTrade() {
         payload.pnl_percent = Math.round(autoPct * 10) / 10
       }
 
-      const res = await fetch('/api/trades', {
-        method: 'POST',
+      const res = await fetch(`/api/trades/${id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      if (res.ok) router.push('/')
+      if (res.ok) router.push(`/trade/${id}`)
     } finally {
       setSaving(false)
     }
   }
 
-  const hasPnlPreview = autoPct !== null || autoPnlSol !== null
-  const totalFees = (fees.prio + fees.tip) * 2
+  if (!loaded) {
+    return <div style={{ maxWidth: 640, margin: '0 auto', padding: '40px 20px', color: 'rgba(255,255,255,0.3)' }}>Chargement...</div>
+  }
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 20px 60px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
-        <Link href="/" className="btn-ghost">← Retour</Link>
-        <h1 style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Nouveau trade</h1>
+        <Link href={`/trade/${id}`} className="btn-ghost">← Retour</Link>
+        <h1 style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Modifier — <span style={{ color: 'rgba(255,255,255,0.5)' }}>{form.token as string}</span>
+        </h1>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -183,8 +199,7 @@ export default function NouveauTrade() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Token">
               <input
-                className="input-field"
-                placeholder="WIF"
+                className="input-field" placeholder="WIF"
                 value={form.token as string}
                 onChange={e => set('token', e.target.value.toUpperCase())}
                 required
@@ -210,26 +225,24 @@ export default function NouveauTrade() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="MC Entrée" hint="(k$)">
-              <input
-                type="number" step="0.1" className="input-field" placeholder="29.9"
+              <input type="number" step="0.1" className="input-field" placeholder="29.9"
                 value={form.market_cap_entree as string}
-                onChange={e => set('market_cap_entree', e.target.value)}
-              />
+                onChange={e => set('market_cap_entree', e.target.value)} />
             </Field>
             <Field label="MC Sortie" hint="(k$)">
-              <input
-                type="number" step="0.1" className="input-field" placeholder="89.7"
+              <input type="number" step="0.1" className="input-field" placeholder="89.7"
                 value={form.market_cap_sortie as string}
-                onChange={e => set('market_cap_sortie', e.target.value)}
-              />
+                onChange={e => set('market_cap_sortie', e.target.value)} />
             </Field>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Taille" hint="(SOL)">
-              <input type="number" step="0.01" className="input-field" placeholder="1.5" value={form.taille as string} onChange={e => set('taille', e.target.value)} />
+              <input type="number" step="0.01" className="input-field" placeholder="1.5"
+                value={form.taille as string}
+                onChange={e => set('taille', e.target.value)} />
             </Field>
-            <Field label="PnL" hint={autoPnlSol !== null && !pnlManual.current ? '(calculé)' : '(SOL)'}>
+            <Field label="PnL" hint={!pnlManual.current && autoPnlSol !== null ? '(calculé)' : '(SOL)'}>
               <div style={{ position: 'relative' }}>
                 <input
                   type="number" step="0.001" className="input-field" placeholder="—"
@@ -250,15 +263,10 @@ export default function NouveauTrade() {
             </Field>
           </div>
 
-          {/* PnL Preview */}
           {hasPnlPreview && (
             <div style={{ marginTop: 4, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               {autoPct !== null && (
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  background: autoPct >= 0 ? 'rgba(48,209,88,0.1)' : 'rgba(255,69,58,0.1)',
-                  borderRadius: 8, padding: '5px 12px',
-                }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: autoPct >= 0 ? 'rgba(48,209,88,0.1)' : 'rgba(255,69,58,0.1)', borderRadius: 8, padding: '5px 12px' }}>
                   <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)' }}>Perf</span>
                   <span style={{ fontWeight: 700, fontSize: '0.95rem', color: autoPct >= 0 ? '#30d158' : '#ff453a' }}>
                     {autoPct >= 0 ? '+' : ''}{autoPct.toFixed(1)}%
@@ -266,17 +274,11 @@ export default function NouveauTrade() {
                 </div>
               )}
               {autoPnlSol !== null && (
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  background: autoPnlSol >= 0 ? 'rgba(48,209,88,0.1)' : 'rgba(255,69,58,0.1)',
-                  borderRadius: 8, padding: '5px 12px',
-                }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: autoPnlSol >= 0 ? 'rgba(48,209,88,0.1)' : 'rgba(255,69,58,0.1)', borderRadius: 8, padding: '5px 12px' }}>
                   <span style={{ fontWeight: 700, fontSize: '0.95rem', color: autoPnlSol >= 0 ? '#30d158' : '#ff453a' }}>
                     {autoPnlSol >= 0 ? '+' : ''}{autoPnlSol.toFixed(3)} SOL
                   </span>
-                  <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)' }}>
-                    fees −{totalFees.toFixed(3)}
-                  </span>
+                  <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)' }}>fees −{totalFees.toFixed(3)}</span>
                 </div>
               )}
             </div>
@@ -286,11 +288,7 @@ export default function NouveauTrade() {
         {/* 2. L'Edge */}
         <Section title="L'Edge">
           <Field label="Narrative">
-            <select
-              className="input-field"
-              value={form.meme_narrative as string}
-              onChange={e => set('meme_narrative', e.target.value)}
-            >
+            <select className="input-field" value={form.meme_narrative as string} onChange={e => set('meme_narrative', e.target.value)}>
               <option value="">— Choisir —</option>
               <option value="Animaux">Animaux</option>
               <option value="Internet meme">Internet meme</option>
@@ -327,30 +325,10 @@ export default function NouveauTrade() {
 
         {/* 3. Discipline */}
         <Section title="Discipline">
-          <Toggle
-            label="R1 — Narrative comprise"
-            sub="Je comprends le meme, pourquoi les gens le partageraient, et il est simple à expliquer."
-            value={form.r1_respectee as boolean}
-            onChange={v => set('r1_respectee', v)}
-          />
-          <Toggle
-            label="R2 — ATH potentiel estimé"
-            sub="J'ai une idée claire du risk/reward et du market cap cible avant d'entrer."
-            value={form.r2_respectee as boolean}
-            onChange={v => set('r2_respectee', v)}
-          />
-          <Toggle
-            label="R3 — Capital libéré si coin lent"
-            sub="Si le coin stagne, je prends profit et je libère le capital pour d'autres opportunités."
-            value={form.r3_respectee as boolean}
-            onChange={v => set('r3_respectee', v)}
-          />
-          <Toggle
-            label="R4 — Perte limitée à -20%"
-            sub="J'ai respecté mon stop loss, même si le coin a pumpé après."
-            value={form.r4_respectee as boolean}
-            onChange={v => set('r4_respectee', v)}
-          />
+          <Toggle label="R1 — Narrative comprise" sub="Je comprends le meme, pourquoi les gens le partageraient, et il est simple à expliquer." value={form.r1_respectee as boolean} onChange={v => set('r1_respectee', v)} />
+          <Toggle label="R2 — ATH potentiel estimé" sub="J'ai une idée claire du risk/reward et du market cap cible avant d'entrer." value={form.r2_respectee as boolean} onChange={v => set('r2_respectee', v)} />
+          <Toggle label="R3 — Capital libéré si coin lent" sub="Si le coin stagne, je prends profit et je libère le capital pour d'autres opportunités." value={form.r3_respectee as boolean} onChange={v => set('r3_respectee', v)} />
+          <Toggle label="R4 — Perte limitée à -20%" sub="J'ai respecté mon stop loss, même si le coin a pumpé après." value={form.r4_respectee as boolean} onChange={v => set('r4_respectee', v)} />
           <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 0' }} />
           <Toggle label="SL touché" value={form.sl_touche as boolean} onChange={v => set('sl_touche', v)} />
           <Toggle label="Coupé au bon moment" value={form.coupe_bon_moment as boolean} onChange={v => set('coupe_bon_moment', v)} />
@@ -367,31 +345,22 @@ export default function NouveauTrade() {
               colorClass={o => o === 'Aucune' ? 'pill-green' : o === 'Exit trop tôt' ? 'pill-orange' : 'pill-red'}
             />
             {form.erreur === 'Autre' && (
-              <input
-                className="input-field"
-                placeholder="Précise..."
-                value={form.erreur_autre as string}
-                onChange={e => set('erreur_autre', e.target.value)}
-                style={{ marginTop: 10 }}
-              />
+              <input className="input-field" placeholder="Précise..." value={form.erreur_autre as string}
+                onChange={e => set('erreur_autre', e.target.value)} style={{ marginTop: 10 }} />
             )}
           </Field>
           <Toggle label="Trade A+" value={form.trade_aplus as boolean} onChange={v => set('trade_aplus', v)} />
           <Field label="Note rapide">
-            <textarea
-              className="input-field"
-              placeholder="Ce qui s'est passé, ce à retenir..."
-              value={form.bien_fait as string}
-              onChange={e => set('bien_fait', e.target.value)}
-              style={{ minHeight: 72 }}
-            />
+            <textarea className="input-field" placeholder="Ce qui s'est passé, ce à retenir..."
+              value={form.bien_fait as string} onChange={e => set('bien_fait', e.target.value)}
+              style={{ minHeight: 72 }} />
           </Field>
         </Section>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <Link href="/" className="btn-ghost">Annuler</Link>
+          <Link href={`/trade/${id}`} className="btn-ghost">Annuler</Link>
           <button type="submit" className="btn-primary" disabled={saving}>
-            {saving ? 'Enregistrement...' : 'Enregistrer'}
+            {saving ? 'Enregistrement...' : 'Sauvegarder'}
           </button>
         </div>
       </form>

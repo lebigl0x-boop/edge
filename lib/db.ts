@@ -107,6 +107,38 @@ export async function createTrade(trade: Record<string, unknown>) {
   return rows[0].id as number
 }
 
+export async function updateTrade(id: number, trade: Record<string, unknown>) {
+  const sql = getSql()
+  const g = (k: string) => trade[k] ?? null
+  await sql`
+    UPDATE trades SET
+      date                = ${g('date')},
+      heure_entree        = ${g('heure_entree')},
+      token               = ${g('token')},
+      market_cap_entree   = ${g('market_cap_entree')},
+      market_cap_sortie   = ${g('market_cap_sortie')},
+      taille              = ${g('taille')},
+      pnl_sol             = ${g('pnl_sol')},
+      pnl_percent         = ${g('pnl_percent')},
+      meme_narrative      = ${g('meme_narrative')},
+      type_trade          = ${g('type_trade')},
+      entry_qualite       = ${g('entry_qualite')},
+      marche_global       = ${g('marche_global')},
+      r1_respectee        = ${g('r1_respectee')},
+      r2_respectee        = ${g('r2_respectee')},
+      r3_respectee        = ${g('r3_respectee')},
+      r4_respectee        = ${g('r4_respectee')},
+      sl_touche           = ${g('sl_touche')},
+      coupe_bon_moment    = ${g('coupe_bon_moment')},
+      coin_lent           = ${g('coin_lent')},
+      erreur              = ${g('erreur')},
+      erreur_autre        = ${g('erreur_autre')},
+      trade_aplus         = ${g('trade_aplus')},
+      bien_fait           = ${g('bien_fait')}
+    WHERE id = ${id}
+  `
+}
+
 export async function deleteTrade(id: number) {
   const sql = getSql()
   await sql`DELETE FROM trades WHERE id = ${id}`

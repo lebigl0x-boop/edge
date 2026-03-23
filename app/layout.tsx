@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import SolanaBalance from '@/components/SolanaBalance'
+import FeesMenu from '@/components/FeesMenu'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
@@ -29,7 +30,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/" style={{ textDecoration: 'none', color: 'white', fontWeight: 700, fontSize: '0.95rem' }}>
             Journal de Trading
           </Link>
-          <SolanaBalance />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FeesMenu />
+            <SolanaBalance />
+          </div>
         </header>
         <main style={{ minHeight: 'calc(100vh - 52px)' }}>
           {children}

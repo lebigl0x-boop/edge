@@ -12,19 +12,20 @@ function fmt(n: number | null, d = 2) {
 
 function formatMC(n: number | null): string {
   if (!n) return '—'
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000
+    return `$${m % 1 === 0 ? m.toFixed(0) : m.toFixed(2)}M`
+  }
+  if (n >= 1_000) {
+    const k = n / 1_000
+    return `$${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}K`
+  }
   return `$${n}`
 }
 
-function Bool({ val }: { val: boolean | number | null }) {
+function Bool({ val, labelYes = 'Oui', labelNo = 'Non' }: { val: boolean | number | null; labelYes?: string; labelNo?: string }) {
   const v = Boolean(val)
-  return <span className={`badge ${v ? 'badge-yes' : 'badge-no'}`}>{v ? 'Oui' : 'Non'}</span>
-}
-
-function QBadge({ val }: { val: string | null }) {
-  if (!val) return <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
-  return <span className={`badge badge-${val}`}>{val}</span>
+  return <span className={`badge ${v ? 'badge-yes' : 'badge-no'}`}>{v ? labelYes : labelNo}</span>
 }
 
 function Kv({ label, children }: { label: string; children: React.ReactNode }) {
@@ -47,10 +48,23 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
+function ConvictionBadge({ val }: { val: string | null }) {
+  if (!val) return <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
+  const map: Record<string, { label: string; color: string }> = {
+    A: { label: 'Forte', color: '#30d158' },
+    B: { label: 'Moyenne', color: '#ff9f0a' },
+    C: { label: 'Faible', color: '#ff453a' },
+  }
+  const m = map[val]
+  if (!m) return <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
+  return <span style={{ color: m.color, fontWeight: 600 }}>{m.label}</span>
+}
+
 function MarcheLabel({ val }: { val: string | null }) {
-  if (val === 'bull') return <span style={{ color: '#30d158' }}>🔥 Bull actif</span>
-  if (val === 'neutre') return <span style={{ color: '#ff9f0a' }}>😐 Neutre</span>
-  if (val === 'mort') return <span style={{ color: '#ff453a' }}>❄️ Mort</span>
+  const v = val?.toLowerCase()
+  if (v === 'bull') return <span style={{ color: '#30d158' }}>Bull</span>
+  if (v === 'neutre') return <span style={{ color: '#ff9f0a' }}>Neutre</span>
+  if (v === 'mort') return <span style={{ color: '#ff453a' }}>Mort</span>
   return <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
 }
 
@@ -107,9 +121,12 @@ export default function TradePage() {
             </div>
           </div>
         </div>
-        <button className="btn-danger" onClick={handleDelete} disabled={deleting}>
-          {deleting ? '...' : 'Supprimer'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link href={`/trade/${id}/edit`} className="btn-ghost">Modifier</Link>
+          <button className="btn-danger" onClick={handleDelete} disabled={deleting}>
+            {deleting ? '...' : 'Supprimer'}
+          </button>
+        </div>
       </div>
 
       {/* Hero PnL */}
@@ -130,8 +147,17 @@ export default function TradePage() {
             {trade.taille != null && (
               <MetaItem label="Taille" value={`${fmt(trade.taille)} SOL`} />
             )}
-            <MetaItem label="MC Entrée" value={formatMC(trade.market_cap_entree)} />
-            <MetaItem label="MC Sortie" value={formatMC(trade.market_cap_sortie)} />
+            {trade.market_cap_entree != null && trade.market_cap_sortie != null ? (
+              <MetaItem
+                label="MC"
+                value={`${formatMC(trade.market_cap_entree)} → ${formatMC(trade.market_cap_sortie)}`}
+              />
+            ) : (
+              <>
+                <MetaItem label="MC Entrée" value={formatMC(trade.market_cap_entree)} />
+                <MetaItem label="MC Sortie" value={formatMC(trade.market_cap_sortie)} />
+              </>
+            )}
             {trade.type_trade && (
               <div>
                 <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', marginBottom: 6 }}>Type</div>
@@ -142,97 +168,53 @@ export default function TradePage() {
         </div>
       </div>
 
-      {/* Grid de blocs */}
+      {/* Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
 
-        <Block title="Contexte & Setup">
+        <Block title="L'Edge">
           {trade.meme_narrative && (
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)', marginBottom: 4 }}>Narrative</div>
-              <div style={{ fontSize: '0.875rem' }}>{trade.meme_narrative}</div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>{trade.meme_narrative}</div>
             </div>
           )}
-          {trade.pourquoi_pump && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)', marginBottom: 4 }}>Pourquoi pump</div>
-              <div style={{ fontSize: '0.875rem', lineHeight: 1.5, color: 'rgba(255,255,255,0.85)' }}>{trade.pourquoi_pump}</div>
-            </div>
-          )}
-          <Kv label="Clarté">{trade.clarte ? `${trade.clarte}/5` : '—'}</Kv>
-          <Kv label="MC Cible">{formatMC(trade.mc_cible)}</Kv>
-          <Kv label="RR Estimé">{trade.rr_estime ? `${fmt(trade.rr_estime, 1)}x` : '—'}</Kv>
-          <Kv label="Validé avant entrée"><Bool val={trade.valide_avant_entree} /></Kv>
-        </Block>
-
-        <Block title="Exécution">
-          <Kv label="Entry qualité"><QBadge val={trade.entry_qualite} /></Kv>
-          <Kv label="Exit qualité"><QBadge val={trade.exit_qualite} /></Kv>
-          <Kv label="Slippage">
-            {trade.slippage ? (
-              <span style={{
-                color: trade.slippage === 'faible' ? '#30d158' : trade.slippage === 'élevé' ? '#ff453a' : '#ff9f0a',
-                fontWeight: 600
-              }}>{trade.slippage}</span>
-            ) : '—'}
-          </Kv>
+          <Kv label="Conviction"><ConvictionBadge val={trade.entry_qualite} /></Kv>
+          <Kv label="Marché"><MarcheLabel val={trade.marche_global} /></Kv>
         </Block>
 
         <Block title="Discipline">
-          <Kv label="R1"><Bool val={trade.r1_respectee} /></Kv>
-          <Kv label="R2"><Bool val={trade.r2_respectee} /></Kv>
-          <Kv label="R3"><Bool val={trade.r3_respectee} /></Kv>
-          <Kv label="R4"><Bool val={trade.r4_respectee} /></Kv>
+          <Kv label="R1 — Narrative"><Bool val={trade.r1_respectee} /></Kv>
+          <Kv label="R2 — ATH estimé"><Bool val={trade.r2_respectee} /></Kv>
+          <Kv label="R3 — Capital libéré"><Bool val={trade.r3_respectee} /></Kv>
+          <Kv label="R4 — SL respecté"><Bool val={trade.r4_respectee} /></Kv>
         </Block>
 
         <Block title="Gestion">
-          <Kv label="SL touché"><Bool val={trade.sl_touche} /></Kv>
+          <Kv label="SL touché"><Bool val={trade.sl_touche} labelYes="Oui" labelNo="Non" /></Kv>
           <Kv label="Coupé au bon moment"><Bool val={trade.coupe_bon_moment} /></Kv>
           <Kv label="Coin lent"><Bool val={trade.coin_lent} /></Kv>
-          <Kv label="Capital libéré"><Bool val={trade.capital_libere} /></Kv>
-        </Block>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-        <Block title="Erreur">
-          {trade.erreur ? (
-            <span className="badge badge-no" style={{ fontSize: '0.8rem', padding: '5px 14px' }}>
-              {trade.erreur === 'Autre' && trade.erreur_autre ? trade.erreur_autre : trade.erreur}
-            </span>
-          ) : (
-            <span style={{ color: '#30d158', fontSize: '0.875rem', fontWeight: 500 }}>✓ Aucune erreur</span>
-          )}
         </Block>
 
-        <Block title="Qualité">
+        <Block title="Review">
           <Kv label="Trade A+"><Bool val={trade.trade_aplus} /></Kv>
-          <Kv label="Devait être pris"><Bool val={trade.devait_etre_pris} /></Kv>
+          <div style={{ marginTop: 12 }}>
+            {trade.erreur && trade.erreur !== 'Aucune' ? (
+              <span className="badge badge-no" style={{ fontSize: '0.8rem', padding: '5px 14px' }}>
+                {trade.erreur === 'Autre' && trade.erreur_autre ? trade.erreur_autre : trade.erreur}
+              </span>
+            ) : (
+              <span style={{ color: '#30d158', fontSize: '0.875rem', fontWeight: 500 }}>✓ Aucune erreur</span>
+            )}
+          </div>
         </Block>
       </div>
 
-      <Block title="Contexte marché">
-        <Kv label="Marché global"><MarcheLabel val={trade.marche_global} /></Kv>
-        {trade.narrative_dominante && (
-          <Kv label="Narrative dominante">{trade.narrative_dominante}</Kv>
-        )}
-      </Block>
-
-      {(trade.bien_fait || trade.ameliorer) && (
-        <div className="card" style={{ padding: 20, marginTop: 10 }}>
-          <div style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: 14 }}>
-            Note rapide
+      {trade.bien_fait && (
+        <div className="card" style={{ padding: 20 }}>
+          <div style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
+            Note
           </div>
-          {trade.bien_fait && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#30d158', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>✓ Bien fait</div>
-              <div style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>{trade.bien_fait}</div>
-            </div>
-          )}
-          {trade.ameliorer && (
-            <div>
-              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ff9f0a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>⚠ À améliorer</div>
-              <div style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>{trade.ameliorer}</div>
-            </div>
-          )}
+          <div style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>{trade.bien_fait}</div>
         </div>
       )}
     </div>
