@@ -70,6 +70,9 @@ export default function Dashboard() {
   const [tab, setTab] = useState<'overview' | 'analytics'>('overview')
   const [chartData, setChartData] = useState<ChartData | null>(null)
   const [tradeFilter, setTradeFilter] = useState<TradeFilter>('all')
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   // Charger les mois disponibles au démarrage
   useEffect(() => {
@@ -106,6 +109,20 @@ export default function Dashboard() {
   })
 
   const isCustomMonth = /^\d{4}-\d{2}$/.test(period)
+  const isCustomRange = period.startsWith('custom:')
+
+  function openDatePicker() {
+    if (isCustomRange) {
+      const parts = period.split(':')
+      setDateFrom(parts[1] ?? '')
+      setDateTo(parts[2] ?? '')
+    }
+    setShowDatePicker(v => !v)
+  }
+
+  function applyRange(from: string, to: string) {
+    if (from && to) setPeriod(`custom:${from}:${to}`)
+  }
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px 48px' }}>
@@ -126,16 +143,16 @@ export default function Dashboard() {
       </div>
 
       {/* Filtres temporels */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: showDatePicker ? 10 : 28, flexWrap: 'wrap' }}>
         <div className="seg-ctrl">
-          <button className={`seg-btn ${period === 'all' ? 'active' : ''}`} onClick={() => setPeriod('all')}>Tout</button>
-          <button className={`seg-btn ${period === 'week' ? 'active' : ''}`} onClick={() => setPeriod('week')}>Cette semaine</button>
-          <button className={`seg-btn ${period === 'month' ? 'active' : ''}`} onClick={() => setPeriod('month')}>Ce mois-ci</button>
+          <button className={`seg-btn ${period === 'all' ? 'active' : ''}`} onClick={() => { setPeriod('all'); setShowDatePicker(false) }}>Tout</button>
+          <button className={`seg-btn ${period === 'week' ? 'active' : ''}`} onClick={() => { setPeriod('week'); setShowDatePicker(false) }}>Cette semaine</button>
+          <button className={`seg-btn ${period === 'month' ? 'active' : ''}`} onClick={() => { setPeriod('month'); setShowDatePicker(false) }}>Ce mois-ci</button>
         </div>
         {months.length > 0 && (
           <select
             value={isCustomMonth ? period : ''}
-            onChange={e => { if (e.target.value) setPeriod(e.target.value) }}
+            onChange={e => { if (e.target.value) { setPeriod(e.target.value); setShowDatePicker(false) } }}
             className="input-field"
             style={{ width: 'auto', padding: '6px 14px', fontSize: '0.8rem', cursor: 'pointer' }}
           >
@@ -145,7 +162,42 @@ export default function Dashboard() {
             ))}
           </select>
         )}
+        <button
+          className={`seg-btn ${isCustomRange ? 'active' : ''}`}
+          onClick={openDatePicker}
+          style={{ borderRadius: 8 }}
+        >
+          {isCustomRange ? `${period.split(':')[1]} → ${period.split(':')[2]}` : '📅 Plage'}
+        </button>
       </div>
+
+      {showDatePicker && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 28, flexWrap: 'wrap' }}>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => { setDateFrom(e.target.value); applyRange(e.target.value, dateTo) }}
+            className="input-field"
+            style={{ width: 'auto', padding: '6px 12px', fontSize: '0.82rem' }}
+          />
+          <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.85rem' }}>→</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => { setDateTo(e.target.value); applyRange(dateFrom, e.target.value) }}
+            className="input-field"
+            style={{ width: 'auto', padding: '6px 12px', fontSize: '0.82rem' }}
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => { setDateFrom(''); setDateTo(''); setPeriod('all'); setShowDatePicker(false) }}
+              style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}
+            >
+              Effacer
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Stats cards */}
       {stats && (

@@ -54,9 +54,11 @@ export async function initSchema() {
 function whereFragment(filter?: string) {
   const sql = getSql()
   if (!filter || filter === 'all') return sql.unsafe('')
-  if (filter === 'week') return sql.unsafe(`AND date >= TO_CHAR(NOW() - INTERVAL '7 days', 'YYYY-MM-DD')`)
+  if (filter === 'week') return sql.unsafe(`AND date >= TO_CHAR(DATE_TRUNC('week', NOW()), 'YYYY-MM-DD') AND date <= TO_CHAR(DATE_TRUNC('week', NOW()) + INTERVAL '6 days', 'YYYY-MM-DD')`)
   if (filter === 'month') return sql.unsafe(`AND date >= TO_CHAR(DATE_TRUNC('month', NOW()), 'YYYY-MM-DD')`)
   if (/^\d{4}-\d{2}$/.test(filter)) return sql.unsafe(`AND date LIKE '${filter}-%'`)
+  const customMatch = filter.match(/^custom:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/)
+  if (customMatch) return sql.unsafe(`AND date >= '${customMatch[1]}' AND date <= '${customMatch[2]}'`)
   return sql.unsafe('')
 }
 
@@ -146,18 +148,13 @@ export async function deleteTrade(id: number) {
 
 export async function getStats(filter?: string) {
   const sql = getSql()
-  const cols = sql`SELECT pnl_sol, trade_aplus, r1_respectee, r2_respectee, r3_respectee, r4_respectee, sl_touche, erreur`
+  const cols = sql`SELECT pnl_sol, pnl_percent, trade_aplus, r1_respectee, r2_respectee, r3_respectee, r4_respectee, sl_touche, erreur`
+  const wf = whereFragment(filter)
   let rows
   if (!filter || filter === 'all') {
     rows = await sql`${cols} FROM trades`
-  } else if (filter === 'week') {
-    rows = await sql`${cols} FROM trades WHERE date >= TO_CHAR(NOW() - INTERVAL '7 days', 'YYYY-MM-DD')`
-  } else if (filter === 'month') {
-    rows = await sql`${cols} FROM trades WHERE date >= TO_CHAR(DATE_TRUNC('month', NOW()), 'YYYY-MM-DD')`
-  } else if (/^\d{4}-\d{2}$/.test(filter)) {
-    rows = await sql`${cols} FROM trades WHERE date LIKE ${filter + '-%'}`
   } else {
-    rows = await sql`${cols} FROM trades`
+    rows = await sql`${cols} FROM trades WHERE 1=1 ${wf}`
   }
 
   const total = rows.length
