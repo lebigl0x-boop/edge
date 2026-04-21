@@ -6,6 +6,7 @@ import type { Trade } from '@/types/trade'
 import type { ChartData } from '@/lib/db'
 
 const AnalyticsTab = lazy(() => import('@/components/AnalyticsTab'))
+const WeekView = lazy(() => import('@/components/WeekView'))
 
 interface Stats {
   total: number; totalPnl: number; wins: number; losses: number
@@ -60,6 +61,7 @@ function formatMC(n: number | null): string {
 
 type Period = 'all' | 'week' | 'month' | string
 type TradeFilter = 'all' | 'wins' | 'losses' | 'aplus'
+type Tab = 'overview' | 'analytics' | 'semaine'
 
 export default function Dashboard() {
   const [trades, setTrades] = useState<Trade[]>([])
@@ -67,7 +69,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<Period>('all')
   const [months, setMonths] = useState<string[]>([])
-  const [tab, setTab] = useState<'overview' | 'analytics'>('overview')
+  const [tab, setTab] = useState<Tab>('overview')
   const [chartData, setChartData] = useState<ChartData | null>(null)
   const [tradeFilter, setTradeFilter] = useState<TradeFilter>('all')
   const [showDatePicker, setShowDatePicker] = useState(false)
@@ -146,7 +148,7 @@ export default function Dashboard() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: showDatePicker ? 10 : 28, flexWrap: 'wrap' }}>
         <div className="seg-ctrl">
           <button className={`seg-btn ${period === 'all' ? 'active' : ''}`} onClick={() => { setPeriod('all'); setShowDatePicker(false) }}>Tout</button>
-          <button className={`seg-btn ${period === 'week' ? 'active' : ''}`} onClick={() => { setPeriod('week'); setShowDatePicker(false) }}>Cette semaine</button>
+          <button className={`seg-btn ${period === 'week' ? 'active' : ''}`} onClick={() => { setPeriod('week'); setShowDatePicker(false); setTab('semaine') }}>Cette semaine</button>
           <button className={`seg-btn ${period === 'month' ? 'active' : ''}`} onClick={() => { setPeriod('month'); setShowDatePicker(false) }}>Ce mois-ci</button>
         </div>
         {months.length > 0 && (
@@ -225,6 +227,9 @@ export default function Dashboard() {
       <div className="tab-bar">
         <button className={`tab-btn ${tab === 'overview' ? 'active' : ''}`} onClick={() => setTab('overview')}>Vue d&apos;ensemble</button>
         <button className={`tab-btn ${tab === 'analytics' ? 'active' : ''}`} onClick={() => setTab('analytics')}>Analytiques</button>
+        {period === 'week' && (
+          <button className={`tab-btn ${tab === 'semaine' ? 'active' : ''}`} onClick={() => setTab('semaine')}>Semaine</button>
+        )}
       </div>
 
       {/* Onglet : Overview */}
@@ -300,6 +305,13 @@ export default function Dashboard() {
       {tab === 'analytics' && (
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: 'rgba(255,255,255,0.3)' }}>Chargement des graphiques...</div>}>
           <AnalyticsTab data={chartData} />
+        </Suspense>
+      )}
+
+      {/* Onglet : Semaine */}
+      {tab === 'semaine' && (
+        <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: 'rgba(255,255,255,0.3)' }}>Chargement...</div>}>
+          <WeekView trades={trades} />
         </Suspense>
       )}
 

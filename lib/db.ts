@@ -9,6 +9,14 @@ function getSql() {
 export async function initSchema() {
   const sql = getSql()
   await sql`
+    CREATE TABLE IF NOT EXISTS daily_notes (
+      id         SERIAL PRIMARY KEY,
+      date       TEXT NOT NULL UNIQUE,
+      note       TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  await sql`
     CREATE TABLE IF NOT EXISTS trades (
       id                  SERIAL PRIMARY KEY,
       date                TEXT NOT NULL DEFAULT '',
@@ -139,6 +147,25 @@ export async function updateTrade(id: number, trade: Record<string, unknown>) {
       bien_fait           = ${g('bien_fait')}
     WHERE id = ${id}
   `
+}
+
+export async function upsertDailyNote(date: string, note: string) {
+  const sql = getSql()
+  await sql`
+    INSERT INTO daily_notes (date, note, updated_at)
+    VALUES (${date}, ${note}, NOW())
+    ON CONFLICT (date) DO UPDATE SET note = ${note}, updated_at = NOW()
+  `
+}
+
+export async function getDailyNotes(from: string, to: string): Promise<{ date: string; note: string }[]> {
+  const sql = getSql()
+  const rows = await sql`
+    SELECT date, note FROM daily_notes
+    WHERE date >= ${from} AND date <= ${to}
+    ORDER BY date ASC
+  `
+  return rows.map(r => ({ date: r.date as string, note: r.note as string }))
 }
 
 export async function deleteTrade(id: number) {
