@@ -71,29 +71,30 @@ export default function SolanaBalance() {
           value={inputVal}
           onChange={e => setInputVal(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false) }}
-          placeholder="Adresse Solana publique..."
+          placeholder="Adresse Solana publique…"
+          className="mono"
           style={{
-            background: 'rgba(255,255,255,0.07)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            borderRadius: 8,
-            padding: '5px 12px',
-            color: 'white',
-            fontSize: '0.8rem',
-            width: 280,
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border-strong)',
+            borderRadius: 6,
+            padding: '4px 10px',
+            color: 'var(--text)',
+            fontSize: 11,
+            width: 260,
             outline: 'none',
             fontFamily: 'inherit',
           }}
         />
-        <button onClick={handleSave} style={{ color: '#0a84ff', background: 'none', border: 'none', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}>
+        <button onClick={handleSave} style={{ color: 'var(--accent)', background: 'none', border: 'none', fontSize: 11, cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}>
           OK
         </button>
         {address && (
-          <button onClick={handleClear} style={{ color: '#ff453a', background: 'none', border: 'none', fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
-            Supprimer
+          <button onClick={handleClear} style={{ color: 'var(--red)', background: 'none', border: 'none', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+            ✕
           </button>
         )}
-        <button onClick={() => setEditing(false)} style={{ color: 'rgba(255,255,255,0.35)', background: 'none', border: 'none', fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>
-          ✕
+        <button onClick={() => setEditing(false)} style={{ color: 'var(--text-4)', background: 'none', border: 'none', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+          Annuler
         </button>
       </div>
     )
@@ -103,39 +104,43 @@ export default function SolanaBalance() {
     return (
       <button
         onClick={() => { setEditing(true); setInputVal('') }}
-        style={{ color: 'rgba(255,255,255,0.4)', background: 'none', border: 'none', fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'color 0.15s' }}
-        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.8)')}
-        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
+        className="mono"
+        style={{ color: 'var(--text-4)', background: 'none', border: 'none', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', transition: 'color 0.15s' }}
+        onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-2)')}
+        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-4)')}
       >
-        + Wallet Solana
+        + Wallet
       </button>
     )
   }
 
+  const short = `${address.slice(0, 3)}…${address.slice(-3)}`
+
   return (
     <button
       onClick={() => { setEditing(true); setInputVal(address) }}
-      title={`${address.slice(0, 6)}...${address.slice(-6)}\nClic pour modifier`}
+      title={address}
+      className="mono"
       style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        background: error ? 'rgba(255,69,58,0.1)' : 'rgba(255,255,255,0.06)',
-        border: 'none', cursor: 'pointer',
-        padding: '5px 12px', borderRadius: 10,
-        transition: 'background 0.15s',
+        display: 'flex', alignItems: 'center', gap: 6,
+        background: 'none', border: 'none', cursor: 'pointer',
+        padding: '4px 8px',
+        transition: 'opacity 0.15s',
         fontFamily: 'inherit',
       }}
-      onMouseEnter={e => (e.currentTarget.style.background = error ? 'rgba(255,69,58,0.15)' : 'rgba(255,255,255,0.1)')}
-      onMouseLeave={e => (e.currentTarget.style.background = error ? 'rgba(255,69,58,0.1)' : 'rgba(255,255,255,0.06)')}
+      onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
+      onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
     >
       <span style={{
-        width: 8, height: 8, borderRadius: '50%',
-        background: error ? '#ff453a' : 'linear-gradient(135deg, #9945FF, #14F195)',
-        flexShrink: 0,
-        boxShadow: error ? 'none' : '0 0 6px rgba(153,69,255,0.5)',
+        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+        background: error ? 'var(--red)' : 'var(--green)',
       }} />
-      <span style={{ color: error ? '#ff453a' : loading ? 'rgba(255,255,255,0.4)' : 'white', fontSize: '0.85rem', fontWeight: 600, transition: 'color 0.2s' }}>
-        {error ? 'Adresse invalide' : balance !== null ? `${balance.toFixed(3)} SOL` : '···'}
+      <span style={{ color: error ? 'var(--red)' : 'var(--text-2)', fontSize: 11 }}>
+        {error ? 'Erreur' : balance !== null ? `${balance.toFixed(2)} SOL` : loading ? '···' : '···'}
       </span>
+      {!error && (
+        <span style={{ color: 'var(--text-4)', fontSize: 11 }}>· {short}</span>
+      )}
     </button>
   )
 }

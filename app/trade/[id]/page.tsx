@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { Trade } from '@/types/trade'
+import PnlNumber from '@/components/ui/PnlNumber'
+import NoteRich from '@/components/ui/NoteRich'
+import { monoFont, tokens } from '@/components/ui/tokens'
 
 function fmt(n: number | null, d = 2) {
   if (n === null || n === undefined) return '—'
@@ -12,60 +15,62 @@ function fmt(n: number | null, d = 2) {
 
 function formatMC(n: number | null): string {
   if (!n) return '—'
-  if (n >= 1_000_000) {
-    const m = n / 1_000_000
-    return `$${m % 1 === 0 ? m.toFixed(0) : m.toFixed(2)}M`
-  }
-  if (n >= 1_000) {
-    const k = n / 1_000
-    return `$${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}K`
-  }
-  return `$${n}`
+  if (n >= 1_000_000) { const m = n / 1_000_000; return `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(2)}M` }
+  if (n >= 1_000) { const k = n / 1_000; return `${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}K` }
+  return String(n)
 }
 
-function Bool({ val, labelYes = 'Oui', labelNo = 'Non' }: { val: boolean | number | null; labelYes?: string; labelNo?: string }) {
-  const v = Boolean(val)
-  return <span className={`badge ${v ? 'badge-yes' : 'badge-no'}`}>{v ? labelYes : labelNo}</span>
-}
-
-function Kv({ label, children }: { label: string; children: React.ReactNode }) {
+function MonoLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="kv-row">
-      <span className="kv-key">{label}</span>
-      <span style={{ fontWeight: 500 }}>{children}</span>
-    </div>
-  )
-}
-
-function Block({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="card" style={{ padding: 20 }}>
-      <div style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: 14 }}>
-        {title}
-      </div>
+    <div style={{ fontFamily: monoFont, fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>
       {children}
     </div>
   )
 }
 
-function ConvictionBadge({ val }: { val: string | null }) {
-  if (!val) return <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
-  const map: Record<string, { label: string; color: string }> = {
-    A: { label: 'Forte', color: '#30d158' },
-    B: { label: 'Moyenne', color: '#ff9f0a' },
-    C: { label: 'Faible', color: '#ff453a' },
-  }
-  const m = map[val]
-  if (!m) return <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
-  return <span style={{ color: m.color, fontWeight: 600 }}>{m.label}</span>
+function MetaCard({ title, rows }: { title?: string; rows: [string, string, string?][] }) {
+  return (
+    <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+      {title && (
+        <div style={{ fontFamily: monoFont, fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '12px 16px 8px' }}>
+          {title}
+        </div>
+      )}
+      {rows.map(([k, v, color], i) => (
+        <div key={k} style={{
+          display: 'flex', justifyContent: 'space-between',
+          padding: '8px 16px', fontSize: 12,
+          borderTop: (i === 0 && !title) ? 'none' : '1px solid var(--border)',
+          fontFamily: monoFont,
+        }}>
+          <span style={{ color: 'var(--text-3)' }}>{k}</span>
+          <span style={{
+            color: color === 'green' ? 'var(--green)' : color === 'red' ? 'var(--red)' : color === 'amber' ? 'var(--amber)' : 'var(--text)',
+            fontWeight: 600,
+          }}>{v}</span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
-function MarcheLabel({ val }: { val: string | null }) {
-  const v = val?.toLowerCase()
-  if (v === 'bull') return <span style={{ color: '#30d158' }}>Bull</span>
-  if (v === 'neutre') return <span style={{ color: '#ff9f0a' }}>Neutre</span>
-  if (v === 'mort') return <span style={{ color: '#ff453a' }}>Mort</span>
-  return <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
+function MCViz({ mcE, mcS }: { mcE: number; mcS: number }) {
+  const pct = ((mcS - mcE) / mcE) * 100
+  const pos = pct >= 0
+  return (
+    <div style={{ width: 200 }}>
+      <div style={{ fontFamily: monoFont, fontSize: 10, color: 'var(--text-3)', display: 'flex', justifyContent: 'space-between' }}>
+        <span>{formatMC(mcE * 1000)}</span>
+        <span style={{ color: pos ? 'var(--green)' : 'var(--red)' }}>→ {formatMC(mcS * 1000)}</span>
+      </div>
+      <div style={{ height: 6, background: 'var(--surface-3)', borderRadius: 3, marginTop: 6, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: '100%', background: `linear-gradient(90deg, var(--text-4), ${pos ? 'var(--green)' : 'var(--red)'})` }} />
+      </div>
+      <div style={{ fontFamily: monoFont, fontSize: 10, color: pos ? 'var(--green)' : 'var(--red)', marginTop: 4, textAlign: 'right' }}>
+        {pos ? '+' : ''}{pct.toFixed(0)}%
+      </div>
+    </div>
+  )
 }
 
 export default function TradePage() {
@@ -89,143 +94,191 @@ export default function TradePage() {
   }
 
   if (loading) {
-    return <div style={{ maxWidth: 760, margin: '0 auto', padding: '40px 20px', color: 'rgba(255,255,255,0.3)' }}>Chargement...</div>
+    return <div style={{ padding: '40px 24px', color: 'var(--text-4)' }}>Chargement…</div>
   }
 
   if (!trade) {
     return (
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: '40px 20px' }}>
-        <p style={{ color: '#ff453a', marginBottom: 16 }}>Trade introuvable.</p>
+      <div style={{ padding: '40px 24px' }}>
+        <p style={{ color: 'var(--red)', marginBottom: 16 }}>Trade introuvable.</p>
         <Link href="/" className="btn-ghost">← Retour</Link>
       </div>
     )
   }
 
   const pnl = trade.pnl_sol ?? 0
-  const pnlColor = pnl > 0 ? '#30d158' : pnl < 0 ? '#ff453a' : 'rgba(255,255,255,0.4)'
+  const mcE = trade.market_cap_entree ? trade.market_cap_entree / 1000 : null
+  const mcS = trade.market_cap_sortie ? trade.market_cap_sortie / 1000 : null
+
+  const convColor = trade.entry_qualite === 'A' ? 'var(--green)' : trade.entry_qualite === 'B' ? 'var(--amber)' : trade.entry_qualite === 'C' ? 'var(--red)' : undefined
+  const convLabel = trade.entry_qualite === 'A' ? 'Forte' : trade.entry_qualite === 'B' ? 'Moyenne' : trade.entry_qualite === 'C' ? 'Faible' : '—'
+
+  const discRules = [
+    { l: 'R1 Narrative', d: 'Comprise', ok: !!trade.r1_respectee },
+    { l: 'R2 ATH cible', d: 'RR estimé', ok: !!trade.r2_respectee },
+    { l: 'R3 Capital', d: 'Scale-out', ok: !!trade.r3_respectee },
+    { l: 'R4 SL −20%', d: 'Stop loss', ok: !!trade.r4_respectee },
+  ]
+  const discCount = discRules.filter(r => r.ok).length
+
+  const infoRows: [string, string, string?][] = [
+    ['Date', trade.date ?? '—'],
+    ...(trade.heure_entree ? [['Heure', trade.heure_entree] as [string, string]] : []),
+    ['Type', trade.type_trade ?? '—'],
+    ...(trade.meme_narrative ? [['Narrative', trade.meme_narrative] as [string, string]] : []),
+    ['Conviction', `${trade.entry_qualite ?? '—'} · ${convLabel}`, (convColor ? (trade.entry_qualite === 'A' ? 'green' : trade.entry_qualite === 'B' ? 'amber' : 'red') : undefined) as string | undefined],
+    ['Marché', trade.marche_global ?? '—', (trade.marche_global?.toLowerCase() === 'bull' ? 'green' : trade.marche_global?.toLowerCase() === 'mort' ? 'red' : 'amber') as string | undefined],
+  ]
+
+  const numberRows: [string, string, string?][] = [
+    ...(mcE !== null ? [['MC entrée', `${formatMC(mcE * 1000)}`] as [string, string]] : []),
+    ...(mcS !== null ? [['MC sortie', `${formatMC(mcS * 1000)}`] as [string, string]] : []),
+    ...(mcE !== null && mcS !== null ? [['Multiple', `×${(mcS / mcE).toFixed(1)}`, (pnl >= 0 ? 'green' : 'red') as string | undefined] as [string, string, string?]] : []),
+    ...(trade.taille !== null ? [['Taille', `${fmt(trade.taille)} SOL`] as [string, string]] : []),
+    ['PnL net', `${pnl >= 0 ? '+' : ''}${fmt(pnl)} SOL`, (pnl > 0 ? 'green' : pnl < 0 ? 'red' : undefined) as string | undefined],
+    ...(trade.pnl_percent !== null ? [['Perf', `${(trade.pnl_percent ?? 0) >= 0 ? '+' : ''}${fmt(trade.pnl_percent, 1)}%`, (pnl > 0 ? 'green' : pnl < 0 ? 'red' : undefined) as string | undefined] as [string, string, string?]] : []),
+  ]
+
+  const execRows: [string, string, string?][] = [
+    ['Entry qualité', trade.entry_qualite ?? '—', (trade.entry_qualite === 'A' ? 'green' : trade.entry_qualite === 'B' ? 'amber' : 'red') as string | undefined],
+    ['Exit qualité', trade.exit_qualite ?? '—', (trade.exit_qualite === 'A' ? 'green' : trade.exit_qualite === 'B' ? 'amber' : 'red') as string | undefined],
+    ['SL touché', trade.sl_touche ? 'Oui' : 'Non', (trade.sl_touche ? 'red' : 'green') as string | undefined],
+    ['Erreur', (!trade.erreur || trade.erreur === 'Aucune') ? 'Aucune' : (trade.erreur === 'Autre' && trade.erreur_autre ? trade.erreur_autre : trade.erreur) ?? '—', (!trade.erreur || trade.erreur === 'Aucune' ? 'green' : 'red') as string | undefined],
+  ]
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '28px 20px 60px' }}>
+    <div style={{ padding: '20px 24px 48px' }}>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link href="/" className="btn-ghost">← Retour</Link>
-          <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {trade.token}
-              {trade.trade_aplus ? <span style={{ fontSize: 16 }}>⭐</span> : null}
-            </h1>
-            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem', marginTop: 2 }}>
-              {trade.date}{trade.heure_entree ? ` · ${trade.heure_entree}` : ''}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Link href={`/trade/${id}/edit`} className="btn-ghost">Modifier</Link>
-          <button className="btn-danger" onClick={handleDelete} disabled={deleting}>
-            {deleting ? '...' : 'Supprimer'}
-          </button>
-        </div>
+      {/* Breadcrumb nav */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        <Link href="/" className="btn-ghost" style={{ padding: '5px 10px', fontSize: 12 }}>
+          ← All trades
+        </Link>
+        <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+          trades / {trade.token}{trade.date ? ` / ${trade.date}` : ''}
+        </span>
+        <div style={{ flex: 1 }} />
+        <Link href={`/trade/${id}/edit`} className="btn-ghost" style={{ fontSize: 12 }}>Modifier</Link>
+        <button className="btn-danger" onClick={handleDelete} disabled={deleting} style={{ fontSize: 12 }}>
+          {deleting ? '…' : 'Supprimer'}
+        </button>
       </div>
 
-      {/* Hero PnL */}
-      <div className="card" style={{ padding: 28, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 40, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', marginBottom: 6 }}>PnL</div>
-            <div style={{ fontSize: '2.5rem', fontWeight: 800, color: pnlColor, letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>
-              {pnl > 0 ? '+' : ''}{fmt(trade.pnl_sol)} SOL
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16 }}>
+
+        {/* Left col */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Hero */}
+          <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '22px 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em' }}>{trade.token}</h1>
+              {trade.trade_aplus && (
+                <span style={{ fontSize: 10, color: 'var(--amber)', border: '1px solid var(--amber)', padding: '2px 7px', borderRadius: 4, fontWeight: 700, letterSpacing: '0.06em' }}>A+</span>
+              )}
+              {trade.type_trade && (
+                <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                  {trade.type_trade}{trade.meme_narrative ? ` · ${trade.meme_narrative}` : ''}
+                </span>
+              )}
             </div>
-            {trade.pnl_percent != null && (
-              <div style={{ fontSize: '1.1rem', color: pnlColor, marginTop: 4, fontWeight: 600 }}>
-                {(trade.pnl_percent ?? 0) > 0 ? '+' : ''}{fmt(trade.pnl_percent, 1)}%
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', paddingTop: 4 }}>
-            {trade.taille != null && (
-              <MetaItem label="Taille" value={`${fmt(trade.taille)} SOL`} />
-            )}
-            {trade.market_cap_entree != null && trade.market_cap_sortie != null ? (
-              <MetaItem
-                label="MC"
-                value={`${formatMC(trade.market_cap_entree)} → ${formatMC(trade.market_cap_sortie)}`}
-              />
-            ) : (
-              <>
-                <MetaItem label="MC Entrée" value={formatMC(trade.market_cap_entree)} />
-                <MetaItem label="MC Sortie" value={formatMC(trade.market_cap_sortie)} />
-              </>
-            )}
-            {trade.type_trade && (
+
+            <div style={{ display: 'flex', gap: 32, alignItems: 'baseline', flexWrap: 'wrap' }}>
               <div>
-                <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', marginBottom: 6 }}>Type</div>
-                <span className="badge" style={{ background: 'rgba(10,132,255,0.12)', color: '#0a84ff' }}>{trade.type_trade}</span>
+                <MonoLabel>PnL</MonoLabel>
+                <PnlNumber value={pnl} size="hero" />
               </div>
-            )}
+              {trade.pnl_percent != null && (
+                <div>
+                  <MonoLabel>Perf</MonoLabel>
+                  <PnlNumber value={trade.pnl_percent} size="hero" unit="%" />
+                </div>
+              )}
+              {mcE !== null && mcS !== null && (
+                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+                  <MCViz mcE={mcE} mcS={mcS} />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-
-        <Block title="L'Edge">
-          {trade.meme_narrative && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)', marginBottom: 4 }}>Narrative</div>
-              <div style={{ fontSize: '0.875rem', fontWeight: 500 }}>{trade.meme_narrative}</div>
+          {/* Note */}
+          {trade.bien_fait && (
+            <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 22px' }}>
+              <MonoLabel>Note</MonoLabel>
+              <div style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text)' }}>
+                <NoteRich value={trade.bien_fait} />
+              </div>
+              {/* Extract tags/mentions */}
+              {(() => {
+                const tags = (trade.bien_fait.match(/#\S+/g) ?? [])
+                const mentions = (trade.bien_fait.match(/@\S+/g) ?? [])
+                const all = [...new Set([...tags, ...mentions])]
+                if (all.length === 0) return null
+                return (
+                  <div style={{ marginTop: 12, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {all.map(t => (
+                      <span key={t} className="mono" style={{
+                        fontSize: 10, padding: '3px 8px', borderRadius: 99,
+                        background: t.startsWith('#') ? tokens.accentSoft : tokens.violetSoft,
+                        color: t.startsWith('#') ? 'var(--accent)' : 'var(--violet)',
+                      }}>{t}</span>
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
           )}
-          <Kv label="Conviction"><ConvictionBadge val={trade.entry_qualite} /></Kv>
-          <Kv label="Marché"><MarcheLabel val={trade.marche_global} /></Kv>
-        </Block>
 
-        <Block title="Discipline">
-          <Kv label="R1 — Narrative"><Bool val={trade.r1_respectee} /></Kv>
-          <Kv label="R2 — ATH estimé"><Bool val={trade.r2_respectee} /></Kv>
-          <Kv label="R3 — Capital libéré"><Bool val={trade.r3_respectee} /></Kv>
-          <Kv label="R4 — SL respecté"><Bool val={trade.r4_respectee} /></Kv>
-        </Block>
+          {/* Discipline checklist */}
+          <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 22px' }}>
+            <MonoLabel>Discipline · {discCount}/4 {discCount === 4 ? '✓' : ''}</MonoLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              {discRules.map(r => (
+                <div key={r.l} style={{
+                  background: r.ok ? 'oklch(0.74 0.16 152 / 0.06)' : 'oklch(0.68 0.21 22 / 0.06)',
+                  border: `1px solid ${r.ok ? 'oklch(0.74 0.16 152 / 0.18)' : 'oklch(0.68 0.21 22 / 0.18)'}`,
+                  borderRadius: 8, padding: '12px 14px',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>{r.l}</span>
+                    <span style={{ color: r.ok ? 'var(--green)' : 'var(--red)', fontSize: 14 }}>{r.ok ? '✓' : '✗'}</span>
+                  </div>
+                  <span style={{ fontFamily: monoFont, fontSize: 10, color: 'var(--text-3)' }}>{r.d}</span>
+                </div>
+              ))}
+            </div>
 
-        <Block title="Gestion">
-          <Kv label="SL touché"><Bool val={trade.sl_touche} labelYes="Oui" labelNo="Non" /></Kv>
-          <Kv label="Coupé au bon moment"><Bool val={trade.coupe_bon_moment} /></Kv>
-          <Kv label="Coin lent"><Bool val={trade.coin_lent} /></Kv>
-        </Block>
-
-        <Block title="Review">
-          <Kv label="Trade A+"><Bool val={trade.trade_aplus} /></Kv>
-          <div style={{ marginTop: 12 }}>
-            {trade.erreur && trade.erreur !== 'Aucune' ? (
-              <span className="badge badge-no" style={{ fontSize: '0.8rem', padding: '5px 14px' }}>
-                {trade.erreur === 'Autre' && trade.erreur_autre ? trade.erreur_autre : trade.erreur}
-              </span>
-            ) : (
-              <span style={{ color: '#30d158', fontSize: '0.875rem', fontWeight: 500 }}>✓ Aucune erreur</span>
-            )}
+            {/* Extra flags */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              {[
+                { l: 'SL touché', v: trade.sl_touche },
+                { l: 'Coupé au bon moment', v: trade.coupe_bon_moment },
+                { l: 'Coin lent', v: trade.coin_lent },
+              ].map(f => (
+                <span key={f.l} style={{
+                  fontFamily: monoFont,
+                  fontSize: 10, padding: '3px 9px', borderRadius: 99,
+                  background: f.v ? 'var(--green-soft)' : 'var(--surface-2)',
+                  color: f.v ? 'var(--green)' : 'var(--text-4)',
+                  border: `1px solid ${f.v ? 'oklch(0.74 0.16 152 / 0.25)' : 'var(--border)'}`,
+                }}>
+                  {f.v ? '✓' : '✗'} {f.l}
+                </span>
+              ))}
+            </div>
           </div>
-        </Block>
-      </div>
 
-      {trade.bien_fait && (
-        <div className="card" style={{ padding: 20 }}>
-          <div style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: 10 }}>
-            Note
-          </div>
-          <div style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>{trade.bien_fait}</div>
         </div>
-      )}
-    </div>
-  )
-}
 
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.35)', marginBottom: 6 }}>{label}</div>
-      <div style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+        {/* Right sidebar — meta cards */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <MetaCard rows={infoRows} />
+          <MetaCard title="Numbers" rows={numberRows} />
+          <MetaCard title="Exécution" rows={execRows} />
+        </div>
+
+      </div>
     </div>
   )
 }

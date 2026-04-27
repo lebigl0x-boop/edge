@@ -3,6 +3,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import NoteRich from '@/components/ui/NoteRich'
+import { monoFont, pnlColor, tokens } from '@/components/ui/tokens'
 
 type Val = string | number | boolean | null
 
@@ -12,61 +14,70 @@ function useForm(init: Record<string, Val>) {
   return { form, set }
 }
 
-function Pills({ options, value, onChange, colorClass }: {
+// ─── Pill row ─────────────────────────────────────────────────────
+function PillRow({
+  label, options, value, onChange, colors,
+}: {
+  label: string
   options: string[]
   value: string
   onChange: (v: string) => void
-  colorClass?: (o: string) => string
+  colors?: Array<'green' | 'red' | 'amber' | 'accent' | 'neutral'>
 }) {
+  const colorMap = {
+    green: tokens.green, red: tokens.red, amber: tokens.amber,
+    accent: tokens.accent, neutral: tokens.text2,
+  }
   return (
-    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-      {options.map(o => {
-        const active = value === o
-        const cls = active ? (colorClass ? colorClass(o) : 'pill-blue') : ''
-        return (
-          <button key={o} type="button" className={`radio-pill ${cls}`} onClick={() => onChange(active ? '' : o)}>
-            {o}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function Toggle({ label, sub, value, onChange }: { label: string; sub?: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="toggle-row" style={{ alignItems: sub ? 'flex-start' : 'center' }}>
-      <div>
-        <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.85)' }}>{label}</div>
-        {sub && <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', marginTop: 2, lineHeight: 1.4 }}>{sub}</div>}
+    <div>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {options.map((o, i) => {
+          const active = o === value
+          const c = colors ? colorMap[colors[i]] : tokens.accent
+          return (
+            <button key={o} type="button" onClick={() => onChange(active ? '' : o)} style={{
+              background: active ? `color-mix(in oklch, ${c} 14%, transparent)` : 'transparent',
+              border: `1px solid ${active ? `color-mix(in oklch, ${c} 30%, transparent)` : 'var(--border)'}`,
+              color: active ? c : 'var(--text-2)',
+              padding: '6px 12px', borderRadius: 99, fontSize: 12, cursor: 'pointer',
+              fontWeight: active ? 600 : 500,
+              transition: 'all 0.15s',
+              fontFamily: 'inherit',
+            }}>{o}</button>
+          )
+        })}
       </div>
-      <button type="button" className={`toggle-btn ${value ? 'on' : 'off'}`} style={{ marginTop: sub ? 2 : 0 }} onClick={() => onChange(!value)} />
     </div>
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+// ─── Field ────────────────────────────────────────────────────────
+function FieldCmd({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="form-section">
-      <div className="section-label">{title}</div>
+    <div>
+      <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{label}</div>
       {children}
     </div>
   )
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="field-wrap">
-      <label className="field-label">
-        {label}
-        {hint && <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.3)', marginLeft: 5 }}>{hint}</span>}
-      </label>
-      {children}
-    </div>
-  )
+const inputCmd: React.CSSProperties = {
+  width: '100%',
+  background: 'var(--surface-2)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  padding: '10px 12px',
+  color: 'var(--text)',
+  fontSize: 14,
+  fontWeight: 500,
+  outline: 'none',
+  fontFamily: "'JetBrains Mono', monospace",
+  fontFeatureSettings: '"tnum"',
+  transition: 'border-color 0.15s',
 }
 
-const convictionMap: Record<string, string> = { Forte: 'A', Moyenne: 'B', Faible: 'C' }
+const convictionMap: Record<string, string> = { 'A · Forte': 'A', 'B · Moyenne': 'B', 'C · Faible': 'C' }
 const FEES_KEY = 'edge_fees'
 const today = new Date().toISOString().slice(0, 10)
 const nowTime = new Date().toTimeString().slice(0, 5)
@@ -85,13 +96,13 @@ export default function NouveauTrade() {
     date: today,
     heure_entree: nowTime,
     token: '',
-    market_cap_entree: '',  // stored in k$, multiplied ×1000 on submit
-    market_cap_sortie: '',  // stored in k$, multiplied ×1000 on submit
+    market_cap_entree: '',
+    market_cap_sortie: '',
     taille: '',
     pnl_sol: '',
     type_trade: '',
     meme_narrative: '',
-    entry_qualite: '',      // A/B/C from conviction
+    entry_qualite: '',
     marche_global: '',
     r1_respectee: false,
     r2_respectee: false,
@@ -118,15 +129,16 @@ export default function NouveauTrade() {
     return { autoPct: pct, autoPnlSol: sol }
   }, [form.market_cap_entree, form.market_cap_sortie, form.taille, fees])
 
-  const convictionLabel = Object.entries(convictionMap).find(([, v]) => v === form.entry_qualite)?.[0] ?? ''
+  const convLabel = Object.entries(convictionMap).find(([, v]) => v === form.entry_qualite)?.[0] ?? ''
   const NUM_FIELDS = ['market_cap_entree', 'market_cap_sortie', 'taille', 'pnl_sol']
-
-  // Auto-populate pnl_sol from calculation unless user has manually edited it
   const pnlManual = useRef(false)
+  const totalFees = (fees.prio + fees.tip) * 2
+
   useEffect(() => {
     if (!pnlManual.current && autoPnlSol !== null) {
       set('pnl_sol', String(Math.round(autoPnlSol * 1000) / 1000))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoPnlSol])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -139,7 +151,6 @@ export default function NouveauTrade() {
         if (NUM_FIELDS.includes(k)) {
           const n = parseFloat(v as string)
           if (!isNaN(n)) {
-            // MC fields entered in k$, convert to full $
             payload[k] = (k === 'market_cap_entree' || k === 'market_cap_sortie') ? n * 1000 : n
           }
         } else {
@@ -147,13 +158,8 @@ export default function NouveauTrade() {
         }
       }
       payload.date = form.date || today
-      // Auto-fill calculated values if not manually entered
-      if (!payload.pnl_sol && autoPnlSol !== null) {
-        payload.pnl_sol = Math.round(autoPnlSol * 1000) / 1000
-      }
-      if (autoPct !== null) {
-        payload.pnl_percent = Math.round(autoPct * 10) / 10
-      }
+      if (!payload.pnl_sol && autoPnlSol !== null) payload.pnl_sol = Math.round(autoPnlSol * 1000) / 1000
+      if (autoPct !== null) payload.pnl_percent = Math.round(autoPct * 10) / 10
 
       const res = await fetch('/api/trades', {
         method: 'POST',
@@ -166,233 +172,343 @@ export default function NouveauTrade() {
     }
   }
 
-  const hasPnlPreview = autoPct !== null || autoPnlSol !== null
-  const totalFees = (fees.prio + fees.tip) * 2
+  const pnlVal = autoPnlSol
+  const pnlBg = pnlVal != null && pnlVal > 0
+    ? 'oklch(0.74 0.16 152 / 0.08)'
+    : pnlVal != null && pnlVal < 0
+      ? 'oklch(0.68 0.21 22 / 0.08)'
+      : 'var(--surface-2)'
+  const pnlBorder = pnlVal != null && pnlVal > 0
+    ? 'oklch(0.74 0.16 152 / 0.25)'
+    : pnlVal != null && pnlVal < 0
+      ? 'oklch(0.68 0.21 22 / 0.25)'
+      : 'var(--border)'
+
+  const disciplines = [
+    { k: 'r1_respectee', l: 'R1 Narrative' },
+    { k: 'r2_respectee', l: 'R2 ATH cible' },
+    { k: 'r3_respectee', l: 'R3 Capital libéré' },
+    { k: 'r4_respectee', l: 'R4 SL −20%' },
+  ] as const
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 20px 60px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
-        <Link href="/" className="btn-ghost">← Retour</Link>
-        <h1 style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Nouveau trade</h1>
-      </div>
+    <div style={{ padding: '28px 24px 60px', display: 'flex', justifyContent: 'center' }}>
+      <form onSubmit={handleSubmit} style={{
+        width: 760,
+        background: 'var(--surface-1)',
+        border: '1px solid var(--border-strong)',
+        borderRadius: 14,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03)',
+        overflow: 'hidden',
+      }}>
 
-      <form onSubmit={handleSubmit}>
-
-        {/* 1. Le Trade */}
-        <Section title="Le Trade">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Token">
-              <input
-                className="input-field"
-                placeholder="WIF"
-                value={form.token as string}
-                onChange={e => set('token', e.target.value.toUpperCase())}
-                required
-              />
-            </Field>
-            <Field label="Type">
-              <Pills
-                options={['Early', 'Breakout', 'Momentum', 'Rotation']}
-                value={form.type_trade as string}
-                onChange={v => set('type_trade', v)}
-              />
-            </Field>
+        {/* Title bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>›</span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>Quick Capture</span>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--text-4)' }}>{today} · {nowTime}</span>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Date">
-              <input type="date" className="input-field" value={form.date as string} onChange={e => set('date', e.target.value)} required />
-            </Field>
-            <Field label="Heure">
-              <input type="time" className="input-field" value={form.heure_entree as string} onChange={e => set('heure_entree', e.target.value)} />
-            </Field>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--text-3)' }}>tab pour avancer · ⏎ pour save · esc</span>
+            <Link href="/" className="btn-ghost" style={{ padding: '4px 10px', fontSize: 11 }}>✕</Link>
           </div>
+        </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="MC Entrée" hint="(k$)">
-              <input
-                type="number" step="0.1" className="input-field" placeholder="29.9"
-                value={form.market_cap_entree as string}
-                onChange={e => set('market_cap_entree', e.target.value)}
-              />
-            </Field>
-            <Field label="MC Sortie" hint="(k$)">
-              <input
-                type="number" step="0.1" className="input-field" placeholder="89.7"
-                value={form.market_cap_sortie as string}
-                onChange={e => set('market_cap_sortie', e.target.value)}
-              />
-            </Field>
-          </div>
+        {/* Numbers row */}
+        <div style={{ padding: '20px 20px 14px', display: 'grid', gridTemplateColumns: '110px 1fr 1fr 1fr 90px', gap: 10, alignItems: 'end' }}>
+          <FieldCmd label="Token">
+            <input
+              value={form.token as string}
+              onChange={e => set('token', e.target.value.toUpperCase())}
+              placeholder="WIF"
+              required
+              style={inputCmd}
+              onFocus={e => { e.currentTarget.style.borderColor = 'oklch(0.74 0.14 240 / 0.4)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+            />
+          </FieldCmd>
+          <FieldCmd label="MC Entrée · k$">
+            <input
+              type="number" step="0.1" placeholder="29.9"
+              value={form.market_cap_entree as string}
+              onChange={e => set('market_cap_entree', e.target.value)}
+              style={inputCmd}
+              onFocus={e => { e.currentTarget.style.borderColor = 'oklch(0.74 0.14 240 / 0.4)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+            />
+          </FieldCmd>
+          <FieldCmd label="MC Sortie · k$">
+            <input
+              type="number" step="0.1" placeholder="89.7"
+              value={form.market_cap_sortie as string}
+              onChange={e => set('market_cap_sortie', e.target.value)}
+              style={inputCmd}
+              onFocus={e => { e.currentTarget.style.borderColor = 'oklch(0.74 0.14 240 / 0.4)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+            />
+          </FieldCmd>
+          <FieldCmd label="Taille · SOL">
+            <input
+              type="number" step="0.01" placeholder="1.5"
+              value={form.taille as string}
+              onChange={e => set('taille', e.target.value)}
+              style={inputCmd}
+              onFocus={e => { e.currentTarget.style.borderColor = 'oklch(0.74 0.14 240 / 0.4)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+            />
+          </FieldCmd>
+          <FieldCmd label="Date">
+            <input
+              type="date"
+              value={form.date as string}
+              onChange={e => set('date', e.target.value)}
+              style={{ ...inputCmd, fontSize: 11 }}
+              onFocus={e => { e.currentTarget.style.borderColor = 'oklch(0.74 0.14 240 / 0.4)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+            />
+          </FieldCmd>
+        </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Taille" hint="(SOL)">
-              <input type="number" step="0.01" className="input-field" placeholder="1.5" value={form.taille as string} onChange={e => set('taille', e.target.value)} />
-            </Field>
-            <Field label="PnL" hint={autoPnlSol !== null && !pnlManual.current ? '(calculé)' : '(SOL)'}>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="number" step="0.001" className="input-field" placeholder="—"
-                  value={form.pnl_sol as string}
-                  onChange={e => { pnlManual.current = true; set('pnl_sol', e.target.value) }}
-                  style={{ paddingRight: pnlManual.current && autoPnlSol !== null ? 52 : undefined }}
-                />
-                {pnlManual.current && autoPnlSol !== null && (
-                  <button
-                    type="button"
-                    onClick={() => { pnlManual.current = false; set('pnl_sol', String(Math.round(autoPnlSol * 1000) / 1000)) }}
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: '0.65rem', color: '#0a84ff', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 4px' }}
-                  >
-                    reset
-                  </button>
-                )}
-              </div>
-            </Field>
-          </div>
-
-          {/* PnL Preview */}
-          {hasPnlPreview && (
-            <div style={{ marginTop: 4, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {autoPct !== null && (
+        {/* Live PnL preview */}
+        <div style={{ padding: '0 20px 18px' }}>
+          <div style={{
+            display: 'flex', gap: 12, padding: '14px 18px', borderRadius: 10,
+            background: pnlBg,
+            border: `1px solid ${pnlBorder}`,
+            alignItems: 'baseline', justifyContent: 'space-between',
+            transition: 'all 0.2s',
+          }}>
+            <div style={{ display: 'flex', gap: 28, alignItems: 'baseline' }}>
+              <div>
+                <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>PnL</div>
                 <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  background: autoPct >= 0 ? 'rgba(48,209,88,0.1)' : 'rgba(255,69,58,0.1)',
-                  borderRadius: 8, padding: '5px 12px',
+                  fontFamily: monoFont,
+                  fontSize: 28, fontWeight: 700,
+                  color: pnlVal != null ? pnlColor(pnlVal) : 'var(--text-3)',
+                  letterSpacing: '-0.02em',
                 }}>
-                  <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)' }}>Perf</span>
-                  <span style={{ fontWeight: 700, fontSize: '0.95rem', color: autoPct >= 0 ? '#30d158' : '#ff453a' }}>
-                    {autoPct >= 0 ? '+' : ''}{autoPct.toFixed(1)}%
-                  </span>
+                  {pnlVal != null ? `${pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(3)}` : '—'}
+                  <span style={{ fontSize: 14, color: 'var(--text-3)', marginLeft: 4, fontWeight: 500 }}>SOL</span>
                 </div>
-              )}
-              {autoPnlSol !== null && (
-                <div style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  background: autoPnlSol >= 0 ? 'rgba(48,209,88,0.1)' : 'rgba(255,69,58,0.1)',
-                  borderRadius: 8, padding: '5px 12px',
-                }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.95rem', color: autoPnlSol >= 0 ? '#30d158' : '#ff453a' }}>
-                    {autoPnlSol >= 0 ? '+' : ''}{autoPnlSol.toFixed(3)} SOL
-                  </span>
-                  <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)' }}>
-                    fees −{totalFees.toFixed(3)}
-                  </span>
+              </div>
+              {autoPct !== null && (
+                <div>
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 4 }}>Perf</div>
+                  <div style={{
+                    fontFamily: monoFont,
+                    fontSize: 28, fontWeight: 700,
+                    color: pnlColor(autoPct),
+                    letterSpacing: '-0.02em',
+                  }}>
+                    {autoPct >= 0 ? '+' : ''}{autoPct.toFixed(0)}%
+                  </div>
                 </div>
               )}
             </div>
-          )}
-        </Section>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+              fees · {totalFees.toFixed(4)} SOL
+            </div>
+          </div>
+        </div>
 
-        {/* 2. L'Edge */}
-        <Section title="L'Edge">
-          <Field label="Narrative">
+        {/* Conviction · Type · Marché */}
+        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <PillRow
+            label="Conviction"
+            options={['A · Forte', 'B · Moyenne', 'C · Faible']}
+            value={convLabel}
+            onChange={v => set('entry_qualite', convictionMap[v] ?? '')}
+            colors={['green', 'amber', 'red']}
+          />
+          <PillRow
+            label="Type"
+            options={['Early', 'Breakout', 'Momentum', 'Rotation']}
+            value={form.type_trade as string}
+            onChange={v => set('type_trade', v)}
+            colors={['accent', 'accent', 'accent', 'accent']}
+          />
+          <PillRow
+            label="Marché"
+            options={['Bull', 'Neutre', 'Mort']}
+            value={form.marche_global as string}
+            onChange={v => set('marche_global', v)}
+            colors={['green', 'amber', 'red']}
+          />
+          <div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>Narrative</div>
             <select
-              className="input-field"
               value={form.meme_narrative as string}
               onChange={e => set('meme_narrative', e.target.value)}
+              style={{
+                ...inputCmd,
+                fontSize: 12,
+                padding: '8px 12px',
+                cursor: 'pointer',
+              }}
+              onFocus={e => { e.currentTarget.style.borderColor = 'oklch(0.74 0.14 240 / 0.4)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
             >
               <option value="">— Choisir —</option>
-              <option value="Animaux">Animaux</option>
-              <option value="Internet meme">Internet meme</option>
-              <option value="Crypto culture">Crypto culture</option>
-              <option value="AI">AI</option>
-              <option value="Tech Narrative">Tech Narrative</option>
-              <option value="Meta narrative">Meta narrative</option>
-              <option value="Political">Political</option>
-              <option value="Societal">Societal</option>
-              <option value="Influencer">Influencer</option>
-              <option value="Trend">Trend</option>
-              <option value="Tweet Play">Tweet Play</option>
+              {['Animaux','Internet meme','Crypto culture','AI','Tech Narrative','Meta narrative','Political','Societal','Influencer','Trend','Tweet Play'].map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
             </select>
-          </Field>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            <Field label="Conviction">
-              <Pills
-                options={['Forte', 'Moyenne', 'Faible']}
-                value={convictionLabel}
-                onChange={v => set('entry_qualite', convictionMap[v] ?? '')}
-                colorClass={o => o === 'Forte' ? 'pill-green' : o === 'Moyenne' ? 'pill-orange' : 'pill-red'}
-              />
-            </Field>
-            <Field label="Marché">
-              <Pills
-                options={['Bull', 'Neutre', 'Mort']}
-                value={form.marche_global as string}
-                onChange={v => set('marche_global', v)}
-                colorClass={o => o === 'Bull' ? 'pill-green' : o === 'Neutre' ? 'pill-orange' : 'pill-red'}
-              />
-            </Field>
           </div>
-        </Section>
+        </div>
 
-        {/* 3. Discipline */}
-        <Section title="Discipline">
-          <Toggle
-            label="R1 — Narrative comprise"
-            sub="Je comprends le meme, pourquoi les gens le partageraient, et il est simple à expliquer."
-            value={form.r1_respectee as boolean}
-            onChange={v => set('r1_respectee', v)}
-          />
-          <Toggle
-            label="R2 — ATH potentiel estimé"
-            sub="J'ai une idée claire du risk/reward et du market cap cible avant d'entrer."
-            value={form.r2_respectee as boolean}
-            onChange={v => set('r2_respectee', v)}
-          />
-          <Toggle
-            label="R3 — Capital libéré si coin lent"
-            sub="Si le coin stagne, je prends profit et je libère le capital pour d'autres opportunités."
-            value={form.r3_respectee as boolean}
-            onChange={v => set('r3_respectee', v)}
-          />
-          <Toggle
-            label="R4 — Perte limitée à -20%"
-            sub="J'ai respecté mon stop loss, même si le coin a pumpé après."
-            value={form.r4_respectee as boolean}
-            onChange={v => set('r4_respectee', v)}
-          />
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 0' }} />
-          <Toggle label="SL touché" value={form.sl_touche as boolean} onChange={v => set('sl_touche', v)} />
-          <Toggle label="Coupé au bon moment" value={form.coupe_bon_moment as boolean} onChange={v => set('coupe_bon_moment', v)} />
-          <Toggle label="Coin lent / stagné" value={form.coin_lent as boolean} onChange={v => set('coin_lent', v)} />
-        </Section>
+        {/* Discipline */}
+        <div style={{ padding: '18px 20px 12px' }}>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>
+            Discipline · 4 règles
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            {disciplines.map(r => {
+              const on = form[r.k] as boolean
+              return (
+                <button key={r.k} type="button" onClick={() => set(r.k, !on)} style={{
+                  background: on ? 'oklch(0.74 0.16 152 / 0.10)' : 'var(--surface-2)',
+                  border: `1px solid ${on ? 'oklch(0.74 0.16 152 / 0.30)' : 'var(--border)'}`,
+                  borderRadius: 8, padding: '10px 12px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  cursor: 'pointer', textAlign: 'left',
+                  transition: 'all 0.15s',
+                }}>
+                  <span style={{ fontSize: 12, color: on ? 'var(--text)' : 'var(--text-2)' }}>{r.l}</span>
+                  <span style={{
+                    width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+                    border: `1.5px solid ${on ? 'var(--green)' : 'var(--text-4)'}`,
+                    background: on ? 'var(--green)' : 'transparent',
+                    color: 'var(--bg)', fontSize: 9,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>{on ? '✓' : ''}</span>
+                </button>
+              )
+            })}
+          </div>
+          {/* Extra toggles */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8 }}>
+            {([
+              { k: 'sl_touche', l: 'SL touché' },
+              { k: 'coupe_bon_moment', l: 'Bon moment' },
+              { k: 'coin_lent', l: 'Coin lent' },
+            ] as const).map(r => {
+              const on = form[r.k] as boolean
+              return (
+                <button key={r.k} type="button" onClick={() => set(r.k, !on)} style={{
+                  background: on ? 'oklch(0.74 0.14 240 / 0.08)' : 'var(--surface-2)',
+                  border: `1px solid ${on ? 'oklch(0.74 0.14 240 / 0.25)' : 'var(--border)'}`,
+                  borderRadius: 8, padding: '8px 12px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}>
+                  <span style={{ fontSize: 11, color: on ? 'var(--text)' : 'var(--text-2)' }}>{r.l}</span>
+                  <span style={{
+                    width: 12, height: 12, borderRadius: 3, flexShrink: 0,
+                    border: `1.5px solid ${on ? 'var(--accent)' : 'var(--text-4)'}`,
+                    background: on ? 'var(--accent)' : 'transparent',
+                    color: 'var(--bg)', fontSize: 8,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>{on ? '✓' : ''}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
-        {/* 4. Review */}
-        <Section title="Review">
-          <Field label="Erreur">
-            <Pills
-              options={['Aucune', 'FOMO', 'Overtrade', 'Mauvais sizing', 'Pas de SL', 'Exit trop tôt', 'Autre']}
-              value={form.erreur as string}
-              onChange={v => set('erreur', v)}
-              colorClass={o => o === 'Aucune' ? 'pill-green' : o === 'Exit trop tôt' ? 'pill-orange' : 'pill-red'}
+        {/* Erreur */}
+        <div style={{ padding: '0 20px 12px' }}>
+          <PillRow
+            label="Erreur"
+            options={['Aucune', 'FOMO', 'Overtrade', 'Mauvais sizing', 'Pas de SL', 'Exit trop tôt', 'Autre']}
+            value={form.erreur as string}
+            onChange={v => set('erreur', v)}
+            colors={['green', 'red', 'red', 'red', 'red', 'amber', 'neutral']}
+          />
+          {form.erreur === 'Autre' && (
+            <input
+              placeholder="Précise…"
+              value={form.erreur_autre as string}
+              onChange={e => set('erreur_autre', e.target.value)}
+              style={{ ...inputCmd, marginTop: 8 }}
             />
-            {form.erreur === 'Autre' && (
-              <input
-                className="input-field"
-                placeholder="Précise..."
-                value={form.erreur_autre as string}
-                onChange={e => set('erreur_autre', e.target.value)}
-                style={{ marginTop: 10 }}
-              />
-            )}
-          </Field>
-          <Toggle label="Trade A+" value={form.trade_aplus as boolean} onChange={v => set('trade_aplus', v)} />
-          <Field label="Note rapide">
-            <textarea
-              className="input-field"
-              placeholder="Ce qui s'est passé, ce à retenir..."
-              value={form.bien_fait as string}
-              onChange={e => set('bien_fait', e.target.value)}
-              style={{ minHeight: 72 }}
-            />
-          </Field>
-        </Section>
+          )}
+        </div>
 
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <Link href="/" className="btn-ghost">Annuler</Link>
-          <button type="submit" className="btn-primary" disabled={saving}>
-            {saving ? 'Enregistrement...' : 'Enregistrer'}
+        {/* Trade A+ */}
+        <div style={{ padding: '0 20px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button type="button" onClick={() => set('trade_aplus', !form.trade_aplus)} style={{
+            background: form.trade_aplus ? 'var(--amber-soft)' : 'transparent',
+            border: `1px solid ${form.trade_aplus ? 'var(--amber)' : 'var(--border)'}`,
+            color: form.trade_aplus ? 'var(--amber)' : 'var(--text-3)',
+            padding: '6px 14px', borderRadius: 99, fontSize: 12, cursor: 'pointer',
+            fontWeight: form.trade_aplus ? 600 : 500, transition: 'all 0.15s',
+            fontFamily: 'inherit',
+          }}>
+            ★ Mark A+
           </button>
+        </div>
+
+        {/* Note */}
+        <div style={{ padding: '0 20px 18px' }}>
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>
+            Note · #tags @tokens supportés
+          </div>
+          <textarea
+            value={form.bien_fait as string}
+            onChange={e => set('bien_fait', e.target.value)}
+            placeholder="Ce qui s'est passé, ce à retenir… #breakout @WIF"
+            style={{
+              width: '100%',
+              minHeight: 80,
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              padding: '12px 14px',
+              color: 'var(--text)',
+              fontSize: 13,
+              lineHeight: 1.5,
+              fontFamily: 'inherit',
+              resize: 'vertical',
+              outline: 'none',
+              transition: 'border-color 0.15s',
+              boxSizing: 'border-box',
+            }}
+            onFocus={e => { e.currentTarget.style.borderColor = 'oklch(0.74 0.14 240 / 0.4)' }}
+            onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+          />
+          {form.bien_fait && (
+            <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--text)' }}>
+              <NoteRich value={form.bien_fait as string} />
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
+            {['#breakout','#patience','#discipline','#fomo','#regret'].map(tag => (
+              <button key={tag} type="button" onClick={() => set('bien_fait', `${form.bien_fait as string} ${tag}`.trim())} className="mono" style={{
+                background: 'transparent', border: '1px solid var(--border)',
+                color: 'var(--text-3)', borderRadius: 99, padding: '3px 9px', fontSize: 10, cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}>{tag}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className="mono" style={{ fontSize: 10, color: 'var(--text-4)' }}>⏎ save · esc cancel</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Link href="/" className="btn-ghost">Annuler</Link>
+            <button type="submit" disabled={saving} style={{
+              background: 'var(--text)', color: 'var(--bg)', border: 'none',
+              padding: '6px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6,
+              opacity: saving ? 0.6 : 1,
+              fontFamily: 'inherit',
+            }}>
+              {saving ? 'Enregistrement…' : 'Save trade'}
+              <span className="mono" style={{ fontSize: 10, opacity: 0.5 }}>⏎</span>
+            </button>
+          </div>
         </div>
       </form>
     </div>

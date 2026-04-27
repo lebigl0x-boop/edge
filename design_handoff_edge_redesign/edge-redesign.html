@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Edge — Redesign Explorations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    color-scheme: dark;
+    --bg-canvas: #0a0a0b;
+    --bg: #0c0c0e;
+    --surface-1: #131316;
+    --surface-2: #1a1a1f;
+    --surface-3: #232329;
+    --border: rgba(255,255,255,0.06);
+    --border-strong: rgba(255,255,255,0.10);
+    --text: #ededf0;
+    --text-2: rgba(237,237,240,0.62);
+    --text-3: rgba(237,237,240,0.38);
+    --text-4: rgba(237,237,240,0.20);
+    --green: oklch(0.74 0.16 152);
+    --green-soft: oklch(0.74 0.16 152 / 0.14);
+    --red: oklch(0.68 0.21 22);
+    --red-soft: oklch(0.68 0.21 22 / 0.14);
+    --amber: oklch(0.78 0.14 70);
+    --amber-soft: oklch(0.78 0.14 70 / 0.14);
+    --accent: oklch(0.74 0.14 240);
+    --accent-soft: oklch(0.74 0.14 240 / 0.14);
+    --violet: oklch(0.72 0.16 290);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg-canvas); color: var(--text); font-family: 'Inter Tight', system-ui, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: "tnum"; }
+  .serif { font-family: 'Fraunces', Georgia, serif; }
+  button { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="edge-data.jsx"></script>
+<script type="text/babel" src="edge-v1-command.jsx"></script>
+<script type="text/babel" src="edge-v2-editorial.jsx"></script>
+<script type="text/babel" src="edge-v3-spatial.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+  function App() {
+    return (
+      <DesignCanvas title="Edge — 3 directions UI/UX" subtitle="Desktop · trading journal memecoin · 5 écrans × 3 directions">
+        <DCSection id="v1" title="Direction 1 · Command Bar" subtitle="Terminal-trader. Dense. ⌘K-first. Saisie en quick-capture inline.">
+          <DCArtboard id="v1-dash" label="Dashboard" width={1320} height={860}><CommandDashboard /></DCArtboard>
+          <DCArtboard id="v1-new" label="Quick Capture" width={1320} height={860}><CommandQuickCapture /></DCArtboard>
+          <DCArtboard id="v1-detail" label="Trade Detail" width={1320} height={860}><CommandTradeDetail /></DCArtboard>
+          <DCArtboard id="v1-week" label="Semaine" width={1320} height={860}><CommandWeek /></DCArtboard>
+          <DCArtboard id="v1-analytics" label="Analytics" width={1320} height={860}><CommandAnalytics /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="v2" title="Direction 2 · Editorial Journal" subtitle="Calme. Typographie large. Le journal d'un trader, pas un terminal. Saisie en wizard 3 étapes.">
+          <DCArtboard id="v2-dash" label="Dashboard" width={1320} height={860}><EditorialDashboard /></DCArtboard>
+          <DCArtboard id="v2-new" label="Nouveau trade" width={1320} height={860}><EditorialNew /></DCArtboard>
+          <DCArtboard id="v2-detail" label="Détail" width={1320} height={860}><EditorialDetail /></DCArtboard>
+          <DCArtboard id="v2-week" label="Semaine" width={1320} height={860}><EditorialWeek /></DCArtboard>
+          <DCArtboard id="v2-analytics" label="Analytics" width={1320} height={860}><EditorialAnalytics /></DCArtboard>
+        </DCSection>
+
+        <DCSection id="v3" title="Direction 3 · Spatial Workspace" subtitle="Sidebar permanente. Table éditable inline. Heatmap d'erreurs. Pour reviewer vite.">
+          <DCArtboard id="v3-dash" label="Dashboard" width={1320} height={860}><SpatialDashboard /></DCArtboard>
+          <DCArtboard id="v3-new" label="Saisie inline" width={1320} height={860}><SpatialNew /></DCArtboard>
+          <DCArtboard id="v3-detail" label="Détail" width={1320} height={860}><SpatialDetail /></DCArtboard>
+          <DCArtboard id="v3-week" label="Semaine" width={1320} height={860}><SpatialWeek /></DCArtboard>
+          <DCArtboard id="v3-analytics" label="Analytics" width={1320} height={860}><SpatialAnalytics /></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

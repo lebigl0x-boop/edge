@@ -1,10 +1,9 @@
 'use client'
 
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  BarChart, Bar, PieChart, Pie, Cell, Legend,
-} from 'recharts'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import type { ChartData } from '@/lib/db'
+import BarRows from '@/components/ui/BarRows'
+import { monoFont } from '@/components/ui/tokens'
 
 const FR_MONTHS: Record<string, string> = {
   '01': 'Jan', '02': 'Fév', '03': 'Mar', '04': 'Avr',
@@ -17,131 +16,193 @@ function monthLabel(ym: string) {
   return FR_MONTHS[m] ?? ym
 }
 
-const COLORS = ['#0a84ff', '#30d158', '#ff9f0a', '#ff453a', '#bf5af2', '#ff6961', '#32ade6']
-const TOOLTIP_STYLE = { background: '#1a1a1a', border: 'none', borderRadius: 10, color: 'white', fontSize: 12 }
+const TOOLTIP_STYLE = {
+  background: 'var(--surface-2)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  color: 'var(--text)',
+  fontSize: 11,
+  fontFamily: monoFont,
+}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', marginBottom: 16 }}>
+    <div style={{ fontFamily: monoFont, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 14 }}>
       {children}
     </div>
   )
 }
 
 function Empty() {
-  return <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 13 }}>Pas encore de données</div>
+  return (
+    <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-4)', fontSize: 12 }}>
+      Pas encore de données
+    </div>
+  )
+}
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 20px' }}>
+      {children}
+    </div>
+  )
 }
 
 export default function AnalyticsTab({ data }: { data: ChartData | null }) {
   if (!data) {
     return (
       <div style={{ display: 'grid', gap: 12 }}>
-        {[1, 2, 3, 4].map(i => (
-          <div key={i} className="card" style={{ padding: 24, height: 200, background: 'rgba(255,255,255,0.03)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        {[1, 2, 3].map(i => (
+          <div key={i} style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, height: 180 }} />
         ))}
       </div>
     )
   }
 
+  // Build equity curve points for the large SVG
+  const equityMax = data.equityCurve.length > 0 ? Math.max(...data.equityCurve.map(p => p.cumPnl)) : 0
+  const equityMin = data.equityCurve.length > 0 ? Math.min(0, ...data.equityCurve.map(p => p.cumPnl)) : 0
+  const peak = equityMax
+  const dd = data.equityCurve.reduce((minDd, p) => {
+    const runMax = Math.max(...data.equityCurve.slice(0, data.equityCurve.indexOf(p) + 1).map(x => x.cumPnl))
+    return Math.min(minDd, p.cumPnl - runMax)
+  }, 0)
+
+  // BarRows data from ChartData
+  const byTypeRows = data.byTradeType.map(r => ({
+    label: r.type,
+    count: r.wins + r.losses,
+    pnl: r.avgPnl * (r.wins + r.losses),
+  })).sort((a, b) => b.pnl - a.pnl)
+
+  const topTokenRows = data.topTokens.map(r => ({
+    label: r.token,
+    count: r.count,
+    pnl: r.totalPnl,
+  }))
+
+  const errorRows = data.errorDistribution
+    .filter(r => r.erreur !== 'Aucune' && r.erreur !== '')
+    .map(r => ({ label: r.erreur, count: r.count, pnl: 0 }))
+
   return (
     <div style={{ display: 'grid', gap: 12 }}>
 
-      {/* Equity Curve */}
-      <div className="card" style={{ padding: 24 }}>
-        <SectionTitle>Courbe de PnL cumulé (SOL)</SectionTitle>
+      {/* Equity curve — large */}
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+          <SectionTitle>Equity Curve · SOL cumulatif</SectionTitle>
+          <div style={{ fontFamily: monoFont, fontSize: 11, color: 'var(--text-2)' }}>
+            peak <span style={{ color: 'var(--green)' }}>{peak >= 0 ? '+' : ''}{peak.toFixed(2)}</span>
+            {dd < 0 && <> · drawdown <span style={{ color: 'var(--red)' }}>{dd.toFixed(2)}</span></>}
+          </div>
+        </div>
         {data.equityCurve.length < 2 ? <Empty /> : (
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={data.equityCurve} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} tickLine={false} axisLine={false} width={50} tickFormatter={v => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}`} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(3)} SOL`, 'PnL cumulé']} />
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={data.equityCurve} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: 'var(--text-3)', fontSize: 10, fontFamily: monoFont }}
+                tickLine={false} axisLine={false}
+              />
+              <YAxis
+                tick={{ fill: 'var(--text-3)', fontSize: 10, fontFamily: monoFont }}
+                tickLine={false} axisLine={false} width={50}
+                tickFormatter={v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)}`}
+              />
+              <Tooltip
+                contentStyle={TOOLTIP_STYLE}
+                formatter={(v) => [`${Number(v) >= 0 ? '+' : ''}${Number(v).toFixed(3)} SOL`, 'PnL cumulé']}
+              />
               <Line
-                type="monotone" dataKey="cumPnl" stroke="#0a84ff" dot={false}
-                strokeWidth={2.5} activeDot={{ r: 5, fill: '#0a84ff' }}
+                type="monotone" dataKey="cumPnl"
+                stroke="oklch(0.74 0.16 152)"
+                strokeWidth={1.5}
+                dot={false}
+                activeDot={{ r: 4, fill: 'oklch(0.74 0.16 152)', stroke: 'none' }}
               />
             </LineChart>
           </ResponsiveContainer>
         )}
-      </div>
+      </Card>
 
-      {/* Win Rate par mois */}
-      <div className="card" style={{ padding: 24 }}>
-        <SectionTitle>Win rate par mois (%)</SectionTitle>
-        {data.winRateByMonth.length === 0 ? <Empty /> : (
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={data.winRateByMonth} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis dataKey="month" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={monthLabel} />
-              <YAxis domain={[0, 100]} tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
+      {/* Win rate by month */}
+      {data.winRateByMonth.length > 1 && (
+        <Card>
+          <SectionTitle>Win rate par mois (%)</SectionTitle>
+          <ResponsiveContainer width="100%" height={160}>
+            <LineChart data={data.winRateByMonth} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis dataKey="month" tick={{ fill: 'var(--text-3)', fontSize: 10, fontFamily: monoFont }} tickLine={false} axisLine={false} tickFormatter={monthLabel} />
+              <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-3)', fontSize: 10, fontFamily: monoFont }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
               <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${v}%`, 'Win Rate']} labelFormatter={(l) => monthLabel(String(l))} />
-              <Bar dataKey="winRate" fill="#30d158" radius={[5, 5, 0, 0]} maxBarSize={48} />
-            </BarChart>
+              <Line type="monotone" dataKey="winRate" stroke="oklch(0.74 0.14 240)" strokeWidth={1.5} dot={false} activeDot={{ r: 4, fill: 'oklch(0.74 0.14 240)', stroke: 'none' }} />
+            </LineChart>
           </ResponsiveContainer>
-        )}
-      </div>
+        </Card>
+      )}
 
-      {/* Row: Trade type + Erreurs */}
+      {/* 2×2 grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
 
-        {/* Par type de trade */}
-        <div className="card" style={{ padding: 24 }}>
-          <SectionTitle>Par type de trade</SectionTitle>
-          {data.byTradeType.length === 0 ? <Empty /> : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={data.byTradeType} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
-                <XAxis type="number" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} tickLine={false} axisLine={false} />
-                <YAxis dataKey="type" type="category" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} tickLine={false} axisLine={false} width={72} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Bar dataKey="wins" name="Wins" fill="#30d158" stackId="s" />
-                <Bar dataKey="losses" name="Losses" fill="#ff453a" stackId="s" radius={[0, 5, 5, 0]} />
-                <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+        <Card>
+          <SectionTitle>Performance par type</SectionTitle>
+          {byTypeRows.length === 0 ? <Empty /> : <BarRows rows={byTypeRows} />}
+        </Card>
 
-        {/* Distribution erreurs */}
-        <div className="card" style={{ padding: 24 }}>
+        <Card>
+          <SectionTitle>Top tokens</SectionTitle>
+          {topTokenRows.length === 0 ? <Empty /> : <BarRows rows={topTokenRows} />}
+        </Card>
+
+        <Card>
           <SectionTitle>Distribution des erreurs</SectionTitle>
-          {data.errorDistribution.length === 0 ? (
-            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 13 }}>Aucune erreur enregistrée</div>
+          {errorRows.length === 0 ? (
+            <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', fontSize: 12, fontFamily: monoFont }}>
+              ✓ Aucune erreur enregistrée
+            </div>
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={data.errorDistribution} dataKey="count" nameKey="erreur" cx="50%" cy="50%" innerRadius={48} outerRadius={76} paddingAngle={4} strokeWidth={0}>
-                  {data.errorDistribution.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {errorRows.map(r => {
+                const maxCount = Math.max(...errorRows.map(x => x.count)) || 1
+                return (
+                  <div key={r.label}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{r.label}</span>
+                      <span style={{ fontFamily: monoFont, fontSize: 11, color: 'var(--red)', fontWeight: 600 }}>{r.count}×</span>
+                    </div>
+                    <div style={{ height: 4, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${(r.count / maxCount) * 100}%`, background: 'var(--red)', opacity: 0.7, borderRadius: 2, transition: 'width 0.4s' }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
-        </div>
-      </div>
+        </Card>
 
-      {/* Top Tokens */}
-      <div className="card" style={{ padding: 24 }}>
-        <SectionTitle>Top tokens par PnL total (SOL)</SectionTitle>
-        {data.topTokens.length === 0 ? <Empty /> : (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data.topTokens} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis dataKey="token" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}`} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(3)} SOL`, 'PnL total']} />
-              <Bar dataKey="totalPnl" radius={[5, 5, 0, 0]} maxBarSize={48}>
-                {data.topTokens.map((entry, i) => (
-                  <Cell key={i} fill={entry.totalPnl >= 0 ? '#30d158' : '#ff453a'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-      </div>
+        <Card>
+          <SectionTitle>Stats par mois</SectionTitle>
+          {data.winRateByMonth.length === 0 ? <Empty /> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[...data.winRateByMonth].reverse().slice(0, 6).map(r => (
+                <div key={r.month} style={{ display: 'grid', gridTemplateColumns: '60px 1fr 60px', gap: 10, alignItems: 'center', fontSize: 12 }}>
+                  <span style={{ fontFamily: monoFont, color: 'var(--text-3)' }}>{monthLabel(r.month)}</span>
+                  <div style={{ height: 4, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${r.winRate}%`, background: r.winRate >= 50 ? 'var(--green)' : 'var(--amber)', borderRadius: 2, transition: 'width 0.4s' }} />
+                  </div>
+                  <span style={{ fontFamily: monoFont, textAlign: 'right', color: r.winRate >= 50 ? 'var(--green)' : 'var(--amber)', fontWeight: 600 }}>
+                    {r.winRate.toFixed(0)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
 
+      </div>
     </div>
   )
 }
