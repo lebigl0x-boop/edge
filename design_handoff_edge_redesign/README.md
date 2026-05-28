@@ -24,7 +24,7 @@ Ne pas copier-coller le HTML. Reconstruire proprement en composants React idioma
 
 > **À compléter par l'utilisateur** — choisir UNE des trois directions ci-dessous avant de lancer le dev :
 >
-> - [ ] **V1 — Command Bar** (terminal-trader, dense, ⌘K-first)
+> - [x ] **V1 — Command Bar** (terminal-trader, dense, ⌘K-first)
 > - [ ] **V2 — Editorial Journal** (calme, typographie large)
 > - [ ] **V3 — Spatial Workspace** (sidebar permanente, table éditable inline)
 

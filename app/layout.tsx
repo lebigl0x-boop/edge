@@ -27,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           zIndex: 100,
           height: 44,
           display: 'grid',
-          gridTemplateColumns: '180px 1fr 300px',
+          gridTemplateColumns: '180px 1fr',
           alignItems: 'center',
           padding: '0 16px',
           background: 'var(--bg)',
@@ -46,29 +46,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               EDGE<span style={{ color: 'var(--text-3)' }}>/journal</span>
             </span>
           </Link>
-
-          {/* Search placeholder */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            background: 'var(--surface-1)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: '6px 12px',
-            cursor: 'text',
-            color: 'var(--text-4)',
-          }}>
-            <span className="mono" style={{ fontSize: 12 }}>›</span>
-            <span className="mono" style={{ fontSize: 12, flex: 1, color: 'var(--text-3)' }}>
-              Search trades, narratives, notes…
-              <span style={{ color: 'var(--text-4)', marginLeft: 8 }}>type &quot;/&quot; for commands</span>
-            </span>
-            <span className="mono" style={{
-              fontSize: 10, fontWeight: 600,
-              padding: '2px 6px', borderRadius: 4,
-              background: 'var(--surface-2)', color: 'var(--text-2)',
-              border: '1px solid var(--border)',
-            }}>⌘ K</span>
-          </div>
 
           {/* Right actions */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
