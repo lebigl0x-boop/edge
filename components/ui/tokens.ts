@@ -30,7 +30,8 @@ export function pnlColor(val: number): string {
   return tokens.text3
 }
 
-export function fmtPnl(val: number, d = 2): string {
+export function fmtPnl(val: number | null | undefined, d = 2): string {
+  if (val == null || isNaN(val)) return '—'
   const sign = val >= 0 ? '+' : ''
   return `${sign}${val.toFixed(d)}`
 }

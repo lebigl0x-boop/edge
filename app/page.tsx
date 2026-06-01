@@ -51,6 +51,11 @@ export default function Dashboard() {
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [draftCount, setDraftCount] = useState(0)
+
+  useEffect(() => {
+    fetch('/api/drafts/count').then(r => r.json()).then((d: { count: number }) => setDraftCount(d.count ?? 0)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     fetch('/api/months').then(r => r.json()).then(setMonths).catch(() => {})
@@ -149,6 +154,32 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: '20px 24px 40px' }}>
+
+      {/* Draft banner */}
+      {draftCount > 0 && (
+        <Link href="/drafts" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 16px',
+          marginBottom: 14,
+          background: 'oklch(0.78 0.14 70 / 0.08)',
+          border: '1px solid oklch(0.78 0.14 70 / 0.25)',
+          borderRadius: 10,
+          textDecoration: 'none',
+          cursor: 'pointer',
+          transition: 'background 0.15s',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--amber)', flexShrink: 0, boxShadow: '0 0 8px oklch(0.78 0.14 70 / 0.6)' }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>
+              {draftCount} trade{draftCount > 1 ? 's' : ''} à valider
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Importés automatiquement</span>
+          </div>
+          <span className="mono" style={{ fontSize: 12, color: 'var(--amber)', opacity: 0.7 }}>Voir →</span>
+        </Link>
+      )}
 
       {/* Hero strip */}
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 14, marginBottom: 14 }}>

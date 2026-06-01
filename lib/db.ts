@@ -56,6 +56,28 @@ export async function initSchema() {
       created_at          TIMESTAMPTZ DEFAULT NOW()
     )
   `
+  // Colonnes auto-import (ajout idempotent)
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS draft BOOLEAN DEFAULT false`
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS tx_signature TEXT`
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS token_address TEXT`
+  // Contrainte unicité sur tx_signature (si pas déjà là)
+  await sql`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'trades_tx_signature_key'
+      ) THEN
+        ALTER TABLE trades ADD CONSTRAINT trades_tx_signature_key UNIQUE (tx_signature);
+      END IF;
+    END $$
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS wallet_settings (
+      id              SERIAL PRIMARY KEY,
+      wallet_address  TEXT NOT NULL,
+      helius_webhook_id TEXT,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
 }
 
 // Fragment WHERE à embarquer dans les tagged templates
@@ -74,9 +96,9 @@ export async function getAllTrades(filter?: string) {
   const sql = getSql()
   const wf = whereFragment(filter)
   if (!filter || filter === 'all') {
-    return await sql`SELECT * FROM trades ORDER BY date DESC, created_at DESC`
+    return await sql`SELECT * FROM trades WHERE draft IS NOT TRUE ORDER BY date DESC, created_at DESC`
   }
-  return await sql`SELECT * FROM trades WHERE 1=1 ${wf} ORDER BY date DESC, created_at DESC`
+  return await sql`SELECT * FROM trades WHERE 1=1 AND (draft IS NOT TRUE) ${wf} ORDER BY date DESC, created_at DESC`
 }
 
 export async function getTradeById(id: number) {
@@ -179,9 +201,9 @@ export async function getStats(filter?: string) {
   const wf = whereFragment(filter)
   let rows
   if (!filter || filter === 'all') {
-    rows = await sql`${cols} FROM trades`
+    rows = await sql`${cols} FROM trades WHERE draft IS NOT TRUE`
   } else {
-    rows = await sql`${cols} FROM trades WHERE 1=1 ${wf}`
+    rows = await sql`${cols} FROM trades WHERE (draft IS NOT TRUE) ${wf}`
   }
 
   const total = rows.length
@@ -231,6 +253,108 @@ export interface ChartData {
   errorDistribution: { erreur: string; count: number }[]
   topTokens: { token: string; totalPnl: number; count: number }[]
   winRateByMonth: { month: string; winRate: number; count: number }[]
+}
+
+// ─── Wallet Settings ──────────────────────────────────────────────────────────
+
+export interface WalletSettings {
+  id: number
+  wallet_address: string
+  helius_webhook_id: string | null
+  created_at: string
+}
+
+export async function getWalletSettings(): Promise<WalletSettings | null> {
+  const sql = getSql()
+  const rows = await sql`SELECT * FROM wallet_settings ORDER BY id ASC LIMIT 1`
+  return (rows[0] ?? null) as WalletSettings | null
+}
+
+export async function upsertWalletSettings(walletAddress: string, webhookId?: string): Promise<void> {
+  const sql = getSql()
+  const rows = await sql`SELECT id FROM wallet_settings ORDER BY id ASC LIMIT 1`
+  if (rows.length > 0) {
+    await sql`
+      UPDATE wallet_settings
+      SET wallet_address = ${walletAddress}, helius_webhook_id = ${webhookId ?? null}
+      WHERE id = ${rows[0].id as number}
+    `
+  } else {
+    await sql`
+      INSERT INTO wallet_settings (wallet_address, helius_webhook_id)
+      VALUES (${walletAddress}, ${webhookId ?? null})
+    `
+  }
+}
+
+// ─── Draft Trades ─────────────────────────────────────────────────────────────
+
+export interface DraftTradeInput {
+  token: string
+  token_address: string
+  taille: number
+  market_cap_entree: number | null
+  market_cap_sortie?: number | null
+  date: string
+  heure_entree: string
+  tx_signature: string
+  direction: 'buy' | 'sell'
+}
+
+export async function getDraftTrades() {
+  const sql = getSql()
+  return await sql`SELECT * FROM trades WHERE draft = true ORDER BY created_at DESC`
+}
+
+export async function createDraftTrade(data: DraftTradeInput): Promise<number> {
+  const sql = getSql()
+  const rows = await sql`
+    INSERT INTO trades (
+      token, token_address, taille, market_cap_entree, market_cap_sortie,
+      date, heure_entree, tx_signature, draft
+    ) VALUES (
+      ${data.token},
+      ${data.token_address},
+      ${data.taille},
+      ${data.market_cap_entree ?? null},
+      ${data.market_cap_sortie ?? null},
+      ${data.date},
+      ${data.heure_entree},
+      ${data.tx_signature},
+      true
+    )
+    RETURNING id
+  `
+  return rows[0].id as number
+}
+
+export async function validateDraft(id: number, updates: Record<string, unknown>): Promise<void> {
+  const sql = getSql()
+  const g = (k: string) => updates[k] ?? null
+  await sql`
+    UPDATE trades SET
+      draft               = false,
+      date                = COALESCE(${g('date')}, date),
+      heure_entree        = COALESCE(${g('heure_entree')}, heure_entree),
+      token               = COALESCE(${g('token')}, token),
+      market_cap_entree   = COALESCE(${g('market_cap_entree')}, market_cap_entree),
+      market_cap_sortie   = COALESCE(${g('market_cap_sortie')}, market_cap_sortie),
+      taille              = COALESCE(${g('taille')}, taille),
+      pnl_sol             = COALESCE(${g('pnl_sol')}, pnl_sol),
+      pnl_percent         = COALESCE(${g('pnl_percent')}, pnl_percent),
+      type_trade          = COALESCE(${g('type_trade')}, type_trade),
+      entry_qualite       = COALESCE(${g('entry_qualite')}, entry_qualite),
+      marche_global       = COALESCE(${g('marche_global')}, marche_global),
+      erreur              = COALESCE(${g('erreur')}, erreur),
+      bien_fait           = COALESCE(${g('bien_fait')}, bien_fait)
+    WHERE id = ${id}
+  `
+}
+
+export async function getDraftCount(): Promise<number> {
+  const sql = getSql()
+  const rows = await sql`SELECT COUNT(*)::int AS count FROM trades WHERE draft = true`
+  return Number(rows[0]?.count ?? 0)
 }
 
 export async function getChartData(filter?: string): Promise<ChartData> {
