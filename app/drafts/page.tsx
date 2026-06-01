@@ -12,10 +12,9 @@ interface DraftTrade {
   taille: number | null
   market_cap_entree: number | null
   market_cap_sortie: number | null
+  pnl_sol: number | null
   tx_signature: string | null
   created_at: string
-  // direction n'est pas stocké directement mais on peut l'inférer
-  // market_cap_entree présent + taille > 0 → buy
 }
 
 function fmtMC(kUsd: number | null): string {
@@ -144,10 +143,10 @@ export default function DraftsPage() {
                       <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{draft.token}</span>
                       <span className="mono" style={{ fontSize: 10, color: 'var(--text-4)' }}>{draft.date} · {draft.heure_entree}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                       {(draft.taille ?? 0) > 0 && (
                         <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                          Taille: <span style={{ color: 'var(--text-2)' }}>{fmtSol(draft.taille)}</span>
+                          Bid: <span style={{ color: 'var(--text-2)' }}>{fmtSol(draft.taille)}</span>
                         </span>
                       )}
                       {draft.market_cap_entree !== null && (
@@ -158,6 +157,14 @@ export default function DraftsPage() {
                       {draft.market_cap_sortie !== null && (
                         <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
                           MC exit: <span style={{ color: 'var(--text-2)' }}>{fmtMC(draft.market_cap_sortie)}</span>
+                        </span>
+                      )}
+                      {draft.pnl_sol !== null && draft.pnl_sol !== undefined && (
+                        <span className="mono" style={{
+                          fontSize: 12, fontWeight: 700,
+                          color: draft.pnl_sol >= 0 ? 'var(--green)' : 'var(--red)',
+                        }}>
+                          {draft.pnl_sol >= 0 ? '+' : ''}{draft.pnl_sol.toFixed(3)} SOL
                         </span>
                       )}
                     </div>

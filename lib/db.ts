@@ -301,6 +301,34 @@ export interface DraftTradeInput {
   direction: 'buy' | 'sell'
 }
 
+// Cherche un draft BUY ouvert pour ce token (pas encore de mc_sortie)
+export async function findOpenBuyDraft(tokenAddress: string) {
+  const sql = getSql()
+  const rows = await sql`
+    SELECT * FROM trades
+    WHERE draft = true
+      AND token_address = ${tokenAddress}
+      AND taille > 0
+      AND market_cap_entree IS NOT NULL
+      AND market_cap_sortie IS NULL
+    ORDER BY created_at DESC
+    LIMIT 1
+  `
+  return rows[0] ?? null
+}
+
+// Complète un draft BUY avec les infos de sortie
+export async function completeDraftWithSell(id: number, mcSortie: number | null, pnlSol: number | null, txSignatureSell: string): Promise<void> {
+  const sql = getSql()
+  await sql`
+    UPDATE trades SET
+      market_cap_sortie = ${mcSortie},
+      pnl_sol           = ${pnlSol},
+      tx_signature      = ${txSignatureSell}
+    WHERE id = ${id}
+  `
+}
+
 export async function getDraftTrades() {
   const sql = getSql()
   return await sql`SELECT * FROM trades WHERE draft = true ORDER BY created_at DESC`

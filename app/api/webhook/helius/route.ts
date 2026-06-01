@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getWalletSettings, createDraftTrade } from '@/lib/db'
-import { parseHeliusSwap, fetchMarketCap, type HeliusTransaction } from '@/lib/helius'
+import { getWalletSettings, createDraftTrade, findOpenBuyDraft, completeDraftWithSell } from '@/lib/db'
+import { parseHeliusSwap, fetchTokenInfo, type HeliusTransaction } from '@/lib/helius'
 
 export async function POST(req: Request) {
   try {
@@ -22,31 +22,45 @@ export async function POST(req: Request) {
       const swap = parseHeliusSwap(tx, walletAddress)
       if (!swap) continue
 
-      // Fetch market cap en parallèle avec la création du draft
-      const mc = await fetchMarketCap(swap.tokenMint)
-
+      const { mc, symbol } = await fetchTokenInfo(swap.tokenMint)
+      const tokenName = symbol || swap.tokenSymbol
       const date = new Date(swap.timestamp * 1000).toISOString().split('T')[0]
       const heure = new Date(swap.timestamp * 1000).toTimeString().slice(0, 5)
 
       try {
+        if (swap.direction === 'sell') {
+          const openBuy = await findOpenBuyDraft(swap.tokenMint)
+
+          if (openBuy) {
+            const mcE = Number(openBuy.market_cap_entree)
+            const mcS = mc
+            const taille = Number(openBuy.taille)
+            const pnl = mcS && mcE > 0 ? taille * (mcS - mcE) / mcE : null
+
+            await completeDraftWithSell(openBuy.id as number, mc, pnl, swap.txSignature)
+            processed++
+            continue
+          }
+          continue
+        }
+
+        // BUY → créer un nouveau draft
         await createDraftTrade({
-          token: swap.tokenSymbol,
+          token: tokenName,
           token_address: swap.tokenMint,
-          taille: swap.direction === 'buy' ? swap.amountSol : 0,
-          market_cap_entree: swap.direction === 'buy' ? mc : null,
-          market_cap_sortie: swap.direction === 'sell' ? mc : null,
+          taille: swap.amountSol,
+          market_cap_entree: mc,
+          market_cap_sortie: null,
           date,
           heure_entree: heure,
           tx_signature: swap.txSignature,
-          direction: swap.direction,
+          direction: 'buy',
         })
         processed++
+
       } catch (err: unknown) {
-        // Contrainte unicité : tx déjà importée, on skip silencieusement
         const msg = err instanceof Error ? err.message : String(err)
-        if (msg.includes('unique') || msg.includes('duplicate')) {
-          continue
-        }
+        if (msg.includes('unique') || msg.includes('duplicate')) continue
         throw err
       }
     }

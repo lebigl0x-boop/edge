@@ -79,7 +79,12 @@ export async function deleteHeliusWebhook(webhookId: string): Promise<void> {
 
 // ─── Market Cap ───────────────────────────────────────────────────────────────
 
-export async function fetchMarketCap(mintAddress: string): Promise<number | null> {
+export interface TokenInfo {
+  mc: number | null    // en k$
+  symbol: string | null
+}
+
+export async function fetchTokenInfo(mintAddress: string): Promise<TokenInfo> {
   // 1. Essai pump.fun
   try {
     const res = await fetch(`https://frontend-api.pump.fun/coins/${mintAddress}`, {
@@ -87,15 +92,15 @@ export async function fetchMarketCap(mintAddress: string): Promise<number | null
       signal: AbortSignal.timeout(5000),
     })
     if (res.ok) {
-      const data = await res.json() as { complete?: boolean; usd_market_cap?: number }
+      const data = await res.json() as { complete?: boolean; usd_market_cap?: number; symbol?: string }
       if (data.usd_market_cap && data.usd_market_cap > 0) {
-        // Retourner en k$ (comme le reste du projet)
-        return data.usd_market_cap / 1000
+        return {
+          mc: data.usd_market_cap / 1000,
+          symbol: data.symbol ?? null,
+        }
       }
     }
-  } catch {
-    // Continue vers fallback
-  }
+  } catch { /* continue */ }
 
   // 2. Fallback DexScreener
   try {
@@ -103,17 +108,23 @@ export async function fetchMarketCap(mintAddress: string): Promise<number | null
       signal: AbortSignal.timeout(5000),
     })
     if (res.ok) {
-      const data = await res.json() as { pairs?: Array<{ fdv?: number }> }
-      const fdv = data.pairs?.[0]?.fdv
-      if (fdv && fdv > 0) {
-        return fdv / 1000  // en k$
+      const data = await res.json() as { pairs?: Array<{ fdv?: number; baseToken?: { symbol?: string } }> }
+      const pair = data.pairs?.[0]
+      if (pair?.fdv && pair.fdv > 0) {
+        return {
+          mc: pair.fdv / 1000,
+          symbol: pair.baseToken?.symbol ?? null,
+        }
       }
     }
-  } catch {
-    // Les deux ont échoué
-  }
+  } catch { /* échec */ }
 
-  return null
+  return { mc: null, symbol: null }
+}
+
+// Compat : garde fetchMarketCap pour ne pas casser d'autres imports éventuels
+export async function fetchMarketCap(mintAddress: string): Promise<number | null> {
+  return (await fetchTokenInfo(mintAddress)).mc
 }
 
 // ─── Swap parsing ─────────────────────────────────────────────────────────────
