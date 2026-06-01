@@ -35,20 +35,13 @@ export async function POST(req: Request) {
           const openBuy = await findOpenBuyDraft(swap.tokenMint)
 
           if (openBuy) {
-            const mcE = Number(openBuy.market_cap_entree)
-            const mcS = mcRounded
-            const taille = Number(openBuy.taille)
-
-            // PNL = gains bruts - frais buy - frais sell
-            const totalFees = Number(openBuy.fees_sol ?? 0) + swap.feeSol
-            const grossPnl = mcS && mcE > 0 ? taille * (mcS - mcE) / mcE : null
-            const pnl = grossPnl !== null ? Math.round((grossPnl - totalFees) * 1000) / 1000 : null
-
-            // R4 : respectée si profit OU perte ≤ 20%
-            const pnlPct = mcS && mcE > 0 ? (mcS - mcE) / mcE * 100 : null
-            const r4 = pnlPct !== null ? pnlPct >= -20 : null
-
-            await completeDraftWithSell(openBuy.id as number, mcRounded, pnl, swap.txSignature, r4)
+            await completeDraftWithSell(
+              openBuy.id as number,
+              mcRounded,
+              swap.amountSol,  // SOL reçu sur ce sell
+              swap.feeSol,
+              swap.txSignature,
+            )
             processed++
             continue
           }

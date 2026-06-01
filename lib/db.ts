@@ -61,6 +61,8 @@ export async function initSchema() {
   await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS tx_signature TEXT`
   await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS token_address TEXT`
   await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS fees_sol DOUBLE PRECISION DEFAULT 0`
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS sol_received DOUBLE PRECISION DEFAULT 0`
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS fees_total DOUBLE PRECISION DEFAULT 0`
   // Contrainte unicité sur tx_signature (si pas déjà là)
   await sql`
     DO $$ BEGIN
@@ -303,7 +305,7 @@ export interface DraftTradeInput {
   direction: 'buy' | 'sell'
 }
 
-// Cherche un draft BUY ouvert pour ce token (pas encore de mc_sortie)
+// Cherche un draft BUY ouvert pour ce token (avec ou sans mc_sortie — gère les sells partiels)
 export async function findOpenBuyDraft(tokenAddress: string) {
   const sql = getSql()
   const rows = await sql`
@@ -312,28 +314,59 @@ export async function findOpenBuyDraft(tokenAddress: string) {
       AND token_address = ${tokenAddress}
       AND taille > 0
       AND market_cap_entree IS NOT NULL
-      AND market_cap_sortie IS NULL
     ORDER BY created_at DESC
     LIMIT 1
   `
   return rows[0] ?? null
 }
 
-// Complète un draft BUY avec les infos de sortie
+// Complète/met à jour un draft BUY avec un sell (partiel ou total)
+// Calcule la moyenne pondérée des exits et le PNL exact
 export async function completeDraftWithSell(
   id: number,
-  mcSortie: number | null,
-  pnlSol: number | null,
+  mcSell: number | null,
+  solReceived: number,
+  feeSell: number,
   txSignatureSell: string,
-  r4Respectee: boolean | null = null,
 ): Promise<void> {
   const sql = getSql()
+
+  // Récupérer les valeurs actuelles pour le calcul incrémental
+  const rows = await sql`SELECT sol_received, market_cap_sortie, taille, fees_sol, fees_total FROM trades WHERE id = ${id}`
+  if (!rows[0]) return
+
+  const prev = rows[0]
+  const prevSolReceived = Number(prev.sol_received ?? 0)
+  const prevMcSortie = Number(prev.market_cap_sortie ?? 0)
+  const taille = Number(prev.taille ?? 0)
+  const feesBuy = Number(prev.fees_sol ?? 0)
+  const prevFeesTotal = Number(prev.fees_total ?? feesBuy)
+
+  // Moyenne pondérée du MC de sortie
+  const newSolReceived = prevSolReceived + solReceived
+  const avgMcSortie = mcSell !== null && newSolReceived > 0
+    ? Math.round(((prevMcSortie * prevSolReceived) + (mcSell * solReceived)) / newSolReceived * 100) / 100
+    : prevMcSortie || mcSell
+
+  // Frais cumulés (buy + tous les sells)
+  const newFeesTotal = Math.round((prevFeesTotal + feeSell) * 1e6) / 1e6
+
+  // PNL exact = SOL reçu total - mise initiale - frais totaux
+  const pnl = Math.round((newSolReceived - taille - newFeesTotal) * 1000) / 1000
+
+  // R4 : perte ≤ 20% par rapport au MC entry
+  const mcEntry = Number((await sql`SELECT market_cap_entree FROM trades WHERE id = ${id}`)[0]?.market_cap_entree ?? 0)
+  const pnlPct = mcEntry > 0 && avgMcSortie ? (avgMcSortie - mcEntry) / mcEntry * 100 : null
+  const r4 = pnlPct !== null ? pnlPct >= -20 : null
+
   await sql`
     UPDATE trades SET
-      market_cap_sortie = ${mcSortie},
-      pnl_sol           = ${pnlSol},
+      market_cap_sortie = ${avgMcSortie},
+      sol_received      = ${newSolReceived},
+      fees_total        = ${newFeesTotal},
+      pnl_sol           = ${pnl},
       tx_signature      = ${txSignatureSell},
-      r4_respectee      = COALESCE(${r4Respectee}, r4_respectee)
+      r4_respectee      = COALESCE(${r4}, r4_respectee)
     WHERE id = ${id}
   `
 }
