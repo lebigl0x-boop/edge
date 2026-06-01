@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     if (!appUrl) {
       return NextResponse.json({ error: 'NEXT_PUBLIC_APP_URL manquant dans .env.local' }, { status: 500 })
     }
-    const webhookUrl = `${appUrl}/api/webhook/helius`
+    const webhookUrl = `${appUrl.replace(/\/$/, '')}/api/webhook/helius`
 
     // Enregistrer le nouveau webhook Helius
     let webhookId: string | undefined
