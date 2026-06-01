@@ -7,6 +7,7 @@ export interface SwapInfo {
   tokenMint: string
   tokenSymbol: string
   amountSol: number      // SOL dépensé (buy) ou reçu (sell)
+  feeSol: number         // frais réels de la transaction (priority fee + tip)
   direction: 'buy' | 'sell'
   timestamp: number       // unix timestamp
 }
@@ -15,6 +16,7 @@ export interface HeliusTransaction {
   signature: string
   timestamp: number
   type: string
+  fee?: number           // frais en lamports (base fee + priority fee)
   tokenTransfers?: Array<{
     mint: string
     tokenAmount: number
@@ -94,8 +96,9 @@ export async function fetchTokenInfo(mintAddress: string): Promise<TokenInfo> {
     if (res.ok) {
       const data = await res.json() as { complete?: boolean; usd_market_cap?: number; symbol?: string }
       if (data.usd_market_cap && data.usd_market_cap > 0) {
+        // usd_market_cap est en millions → convertir en k$ (* 1000)
         return {
-          mc: data.usd_market_cap / 1000,
+          mc: Math.round(data.usd_market_cap * 1000 * 100) / 100,
           symbol: data.symbol ?? null,
         }
       }
@@ -111,8 +114,9 @@ export async function fetchTokenInfo(mintAddress: string): Promise<TokenInfo> {
       const data = await res.json() as { pairs?: Array<{ fdv?: number; baseToken?: { symbol?: string } }> }
       const pair = data.pairs?.[0]
       if (pair?.fdv && pair.fdv > 0) {
+        // fdv est en USD → convertir en k$
         return {
-          mc: pair.fdv / 1000,
+          mc: Math.round(pair.fdv / 1000 * 100) / 100,
           symbol: pair.baseToken?.symbol ?? null,
         }
       }
@@ -185,11 +189,16 @@ export function parseHeliusSwap(tx: HeliusTransaction, walletAddress?: string): 
   // Ignorer les montants microscopiques (dust)
   if (direction === 'buy' && amountSol < 0.001) return null
 
+  // Frais réels : champ fee Helius (lamports) = base fee + priority fee
+  // On arrondit à 6 décimales pour éviter le floating point noise
+  const feeSol = tx.fee ? Math.round(tx.fee / 1e9 * 1e6) / 1e6 : 0
+
   return {
     txSignature: tx.signature,
     tokenMint,
     tokenSymbol,
-    amountSol,
+    amountSol: Math.round(amountSol * 1e6) / 1e6,
+    feeSol,
     direction,
     timestamp: tx.timestamp,
   }

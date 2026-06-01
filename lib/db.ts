@@ -60,6 +60,7 @@ export async function initSchema() {
   await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS draft BOOLEAN DEFAULT false`
   await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS tx_signature TEXT`
   await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS token_address TEXT`
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS fees_sol DOUBLE PRECISION DEFAULT 0`
   // Contrainte unicité sur tx_signature (si pas déjà là)
   await sql`
     DO $$ BEGIN
@@ -293,6 +294,7 @@ export interface DraftTradeInput {
   token: string
   token_address: string
   taille: number
+  fees_sol?: number
   market_cap_entree: number | null
   market_cap_sortie?: number | null
   date: string
@@ -318,13 +320,20 @@ export async function findOpenBuyDraft(tokenAddress: string) {
 }
 
 // Complète un draft BUY avec les infos de sortie
-export async function completeDraftWithSell(id: number, mcSortie: number | null, pnlSol: number | null, txSignatureSell: string): Promise<void> {
+export async function completeDraftWithSell(
+  id: number,
+  mcSortie: number | null,
+  pnlSol: number | null,
+  txSignatureSell: string,
+  r4Respectee: boolean | null = null,
+): Promise<void> {
   const sql = getSql()
   await sql`
     UPDATE trades SET
       market_cap_sortie = ${mcSortie},
       pnl_sol           = ${pnlSol},
-      tx_signature      = ${txSignatureSell}
+      tx_signature      = ${txSignatureSell},
+      r4_respectee      = COALESCE(${r4Respectee}, r4_respectee)
     WHERE id = ${id}
   `
 }
@@ -338,12 +347,13 @@ export async function createDraftTrade(data: DraftTradeInput): Promise<number> {
   const sql = getSql()
   const rows = await sql`
     INSERT INTO trades (
-      token, token_address, taille, market_cap_entree, market_cap_sortie,
+      token, token_address, taille, fees_sol, market_cap_entree, market_cap_sortie,
       date, heure_entree, tx_signature, draft
     ) VALUES (
       ${data.token},
       ${data.token_address},
       ${data.taille},
+      ${data.fees_sol ?? 0},
       ${data.market_cap_entree ?? null},
       ${data.market_cap_sortie ?? null},
       ${data.date},

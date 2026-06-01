@@ -27,17 +27,28 @@ export async function POST(req: Request) {
       const date = new Date(swap.timestamp * 1000).toISOString().split('T')[0]
       const heure = new Date(swap.timestamp * 1000).toTimeString().slice(0, 5)
 
+      // Arrondir le MC à 2 décimales en k$
+      const mcRounded = mc !== null ? Math.round(mc * 100) / 100 : null
+
       try {
         if (swap.direction === 'sell') {
           const openBuy = await findOpenBuyDraft(swap.tokenMint)
 
           if (openBuy) {
             const mcE = Number(openBuy.market_cap_entree)
-            const mcS = mc
+            const mcS = mcRounded
             const taille = Number(openBuy.taille)
-            const pnl = mcS && mcE > 0 ? taille * (mcS - mcE) / mcE : null
 
-            await completeDraftWithSell(openBuy.id as number, mc, pnl, swap.txSignature)
+            // PNL = gains bruts - frais buy - frais sell
+            const totalFees = Number(openBuy.fees_sol ?? 0) + swap.feeSol
+            const grossPnl = mcS && mcE > 0 ? taille * (mcS - mcE) / mcE : null
+            const pnl = grossPnl !== null ? Math.round((grossPnl - totalFees) * 1000) / 1000 : null
+
+            // R4 : respectée si profit OU perte ≤ 20%
+            const pnlPct = mcS && mcE > 0 ? (mcS - mcE) / mcE * 100 : null
+            const r4 = pnlPct !== null ? pnlPct >= -20 : null
+
+            await completeDraftWithSell(openBuy.id as number, mcRounded, pnl, swap.txSignature, r4)
             processed++
             continue
           }
@@ -49,7 +60,8 @@ export async function POST(req: Request) {
           token: tokenName,
           token_address: swap.tokenMint,
           taille: swap.amountSol,
-          market_cap_entree: mc,
+          fees_sol: swap.feeSol,
+          market_cap_entree: mcRounded,
           market_cap_sortie: null,
           date,
           heure_entree: heure,
