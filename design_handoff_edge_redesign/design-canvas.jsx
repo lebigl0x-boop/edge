@@ -11,7 +11,7 @@
 //     <DCSection id="onboarding" title="Onboarding" subtitle="First-run variants">
 //       <DCArtboard id="a" label="A · Dusk" width={260} height={480}>…</DCArtboard>
 //       <DCArtboard id="b" label="B · Minimal" width={260} height={480}>…</DCArtboard>
-//     </DCSection>
+//     </DCSection>dddddddd
 //   </DesignCanvas>
 
 const DC = {
