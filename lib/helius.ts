@@ -131,6 +131,40 @@ export async function fetchMarketCap(mintAddress: string): Promise<number | null
   return (await fetchTokenInfo(mintAddress)).mc
 }
 
+// ─── Polling ──────────────────────────────────────────────────────────────────
+
+export async function fetchRecentTransactions(
+  walletAddress: string,
+  lastSignature?: string | null,
+): Promise<HeliusTransaction[]> {
+  const apiKey = process.env.HELIUS_API_KEY
+  if (!apiKey) throw new Error('HELIUS_API_KEY manquant dans .env.local')
+
+  const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${apiKey}&limit=50&type=ANY`
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Helius fetchTransactions failed: ${res.status} — ${body}`)
+  }
+
+  const transactions = await res.json() as HeliusTransaction[]
+
+  if (!lastSignature) {
+    // Premier run : prendre seulement les 10 dernières pour ne pas spammer
+    return transactions.slice(0, 10)
+  }
+
+  const lastIndex = transactions.findIndex(tx => tx.signature === lastSignature)
+  if (lastIndex === -1) {
+    // Signature pas trouvée dans les 50 dernières : prendre les 20 premières
+    return transactions.slice(0, 20)
+  }
+
+  // Toutes les tx plus récentes que lastSignature (index 0 = la plus récente)
+  return transactions.slice(0, lastIndex)
+}
+
 // ─── Swap parsing ─────────────────────────────────────────────────────────────
 
 export function parseHeliusSwap(tx: HeliusTransaction, walletAddress?: string): SwapInfo | null {

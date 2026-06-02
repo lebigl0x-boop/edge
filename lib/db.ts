@@ -81,6 +81,7 @@ export async function initSchema() {
       created_at      TIMESTAMPTZ DEFAULT NOW()
     )
   `
+  await sql`ALTER TABLE wallet_settings ADD COLUMN IF NOT EXISTS last_tx_signature TEXT`
 }
 
 // Fragment WHERE à embarquer dans les tagged templates
@@ -169,7 +170,8 @@ export async function updateTrade(id: number, trade: Record<string, unknown>) {
       erreur              = ${g('erreur')},
       erreur_autre        = ${g('erreur_autre')},
       trade_aplus         = ${g('trade_aplus')},
-      bien_fait           = ${g('bien_fait')}
+      bien_fait           = ${g('bien_fait')},
+      draft               = false
     WHERE id = ${id}
   `
 }
@@ -271,6 +273,21 @@ export async function getWalletSettings(): Promise<WalletSettings | null> {
   const sql = getSql()
   const rows = await sql`SELECT * FROM wallet_settings ORDER BY id ASC LIMIT 1`
   return (rows[0] ?? null) as WalletSettings | null
+}
+
+export async function getLastTxSignature(): Promise<string | null> {
+  const sql = getSql()
+  const rows = await sql`SELECT last_tx_signature FROM wallet_settings ORDER BY id ASC LIMIT 1`
+  return (rows[0]?.last_tx_signature as string) ?? null
+}
+
+export async function updateLastTxSignature(signature: string): Promise<void> {
+  const sql = getSql()
+  await sql`
+    UPDATE wallet_settings
+    SET last_tx_signature = ${signature}
+    WHERE id = (SELECT id FROM wallet_settings ORDER BY id ASC LIMIT 1)
+  `
 }
 
 export async function upsertWalletSettings(walletAddress: string, webhookId?: string): Promise<void> {
