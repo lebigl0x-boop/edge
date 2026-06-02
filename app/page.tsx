@@ -53,8 +53,15 @@ export default function Dashboard() {
   const [dateTo, setDateTo] = useState('')
   const [draftCount, setDraftCount] = useState(0)
 
+  // Sync trades + refresh draft count — au chargement et toutes les 60s
   useEffect(() => {
-    fetch('/api/drafts/count').then(r => r.json()).then((d: { count: number }) => setDraftCount(d.count ?? 0)).catch(() => {})
+    function syncAndRefresh() {
+      fetch('/api/cron/sync-trades').catch(() => {})
+      fetch('/api/drafts/count').then(r => r.json()).then((d: { count: number }) => setDraftCount(d.count ?? 0)).catch(() => {})
+    }
+    syncAndRefresh()
+    const interval = setInterval(syncAndRefresh, 60_000)
+    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
