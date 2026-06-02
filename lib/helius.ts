@@ -134,7 +134,13 @@ export async function fetchMarketCap(mintAddress: string): Promise<number | null
 // ─── Swap parsing ─────────────────────────────────────────────────────────────
 
 export function parseHeliusSwap(tx: HeliusTransaction, walletAddress?: string): SwapInfo | null {
-  if (tx.type !== 'SWAP') return null
+  // Terminal (Padre), pump.fun et autres peuvent ne pas être classifiés SWAP
+  const SWAP_TYPES = ['SWAP', 'UNKNOWN', 'ANY']
+  if (tx.type && !SWAP_TYPES.includes(tx.type) && tx.type !== '') {
+    // Garder seulement les types clairement non-swap
+    const IGNORE_TYPES = ['TRANSFER', 'NFT_SALE', 'NFT_MINT', 'BURN', 'STAKE']
+    if (IGNORE_TYPES.includes(tx.type)) return null
+  }
 
   const tokenTransfers = tx.tokenTransfers ?? []
   const nativeTransfers = tx.nativeTransfers ?? []
