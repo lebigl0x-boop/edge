@@ -116,7 +116,6 @@ export default function TradePage() {
   const discRules = [
     { l: 'R1 Narrative', d: 'Comprise', ok: !!trade.r1_respectee },
     { l: 'R2 ATH cible', d: 'RR estimé', ok: !!trade.r2_respectee },
-    { l: 'R3 Capital', d: 'Scale-out', ok: !!trade.r3_respectee },
     { l: 'R4 SL −20%', d: 'Stop loss', ok: !!trade.r4_respectee },
   ]
   const discCount = discRules.filter(r => r.ok).length
@@ -124,10 +123,8 @@ export default function TradePage() {
   const infoRows: [string, string, string?][] = [
     ['Date', trade.date ?? '—'],
     ...(trade.heure_entree ? [['Heure', trade.heure_entree] as [string, string]] : []),
-    ['Type', trade.type_trade ?? '—'],
     ...(trade.meme_narrative ? [['Narrative', trade.meme_narrative] as [string, string]] : []),
     ['Conviction', `${trade.entry_qualite ?? '—'} · ${convLabel}`, (convColor ? (trade.entry_qualite === 'A' ? 'green' : trade.entry_qualite === 'B' ? 'amber' : 'red') : undefined) as string | undefined],
-    ['Marché', trade.marche_global ?? '—', (trade.marche_global?.toLowerCase() === 'bull' ? 'green' : trade.marche_global?.toLowerCase() === 'mort' ? 'red' : 'amber') as string | undefined],
   ]
 
   const numberRows: [string, string, string?][] = [
@@ -176,9 +173,9 @@ export default function TradePage() {
               {trade.trade_aplus && (
                 <span style={{ fontSize: 10, color: 'var(--amber)', border: '1px solid var(--amber)', padding: '2px 7px', borderRadius: 4, fontWeight: 700, letterSpacing: '0.06em' }}>A+</span>
               )}
-              {trade.type_trade && (
+              {trade.meme_narrative && (
                 <span className="mono" style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                  {trade.type_trade}{trade.meme_narrative ? ` · ${trade.meme_narrative}` : ''}
+                  {trade.meme_narrative}
                 </span>
               )}
             </div>
@@ -232,8 +229,8 @@ export default function TradePage() {
 
           {/* Discipline checklist */}
           <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 22px' }}>
-            <MonoLabel>Discipline · {discCount}/4 {discCount === 4 ? '✓' : ''}</MonoLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            <MonoLabel>Discipline · {discCount}/3 {discCount === 3 ? '✓' : ''}</MonoLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
               {discRules.map(r => (
                 <div key={r.l} style={{
                   background: r.ok ? 'oklch(0.74 0.16 152 / 0.06)' : 'oklch(0.68 0.21 22 / 0.06)',

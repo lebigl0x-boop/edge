@@ -73,9 +73,9 @@ const FEES_KEY = 'edge_fees'
 const EMPTY: Record<string, Val> = {
   date: '', heure_entree: '', token: '',
   market_cap_entree: '', market_cap_sortie: '',
-  taille: '', pnl_sol: '', type_trade: '',
-  meme_narrative: '', entry_qualite: '', marche_global: '',
-  r1_respectee: false, r2_respectee: false, r3_respectee: false, r4_respectee: false,
+  taille: '', pnl_sol: '',
+  meme_narrative: '', entry_qualite: '',
+  r1_respectee: false, r2_respectee: false, r4_respectee: false,
   sl_touche: false, coupe_bon_moment: false, coin_lent: false,
   erreur: '', erreur_autre: '', trade_aplus: false, bien_fait: '',
 }
@@ -107,13 +107,10 @@ export default function EditTrade() {
           market_cap_sortie: t.market_cap_sortie != null ? String(t.market_cap_sortie / 1000) : '',
           taille: t.taille != null ? String(t.taille) : '',
           pnl_sol: t.pnl_sol != null ? String(t.pnl_sol) : '',
-          type_trade: t.type_trade ?? '',
           meme_narrative: t.meme_narrative ?? '',
           entry_qualite: t.entry_qualite ?? '',
-          marche_global: t.marche_global ?? '',
           r1_respectee: Boolean(t.r1_respectee),
           r2_respectee: Boolean(t.r2_respectee),
-          r3_respectee: Boolean(t.r3_respectee),
           r4_respectee: Boolean(t.r4_respectee),
           sl_touche: Boolean(t.sl_touche),
           coupe_bon_moment: Boolean(t.coupe_bon_moment),
@@ -205,14 +202,7 @@ export default function EditTrade() {
                 required
               />
             </Field>
-            <Field label="Type">
-              <Pills
-                options={['Early', 'Breakout', 'Momentum', 'Rotation']}
-                value={form.type_trade as string}
-                onChange={v => set('type_trade', v)}
-              />
-            </Field>
-          </div>
+            </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Date">
@@ -303,31 +293,20 @@ export default function EditTrade() {
               <option value="Tweet Play">Tweet Play</option>
             </select>
           </Field>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            <Field label="Conviction">
-              <Pills
-                options={['Forte', 'Moyenne', 'Faible']}
-                value={convictionLabel}
-                onChange={v => set('entry_qualite', convictionMap[v] ?? '')}
-                colorClass={o => o === 'Forte' ? 'pill-green' : o === 'Moyenne' ? 'pill-orange' : 'pill-red'}
-              />
-            </Field>
-            <Field label="Marché">
-              <Pills
-                options={['Bull', 'Neutre', 'Mort']}
-                value={form.marche_global as string}
-                onChange={v => set('marche_global', v)}
-                colorClass={o => o === 'Bull' ? 'pill-green' : o === 'Neutre' ? 'pill-orange' : 'pill-red'}
-              />
-            </Field>
-          </div>
+          <Field label="Conviction">
+            <Pills
+              options={['Forte', 'Moyenne', 'Faible']}
+              value={convictionLabel}
+              onChange={v => set('entry_qualite', convictionMap[v] ?? '')}
+              colorClass={o => o === 'Forte' ? 'pill-green' : o === 'Moyenne' ? 'pill-orange' : 'pill-red'}
+            />
+          </Field>
         </Section>
 
         {/* 3. Discipline */}
         <Section title="Discipline">
           <Toggle label="R1 — Narrative comprise" sub="Je comprends le meme, pourquoi les gens le partageraient, et il est simple à expliquer." value={form.r1_respectee as boolean} onChange={v => set('r1_respectee', v)} />
           <Toggle label="R2 — ATH potentiel estimé" sub="J'ai une idée claire du risk/reward et du market cap cible avant d'entrer." value={form.r2_respectee as boolean} onChange={v => set('r2_respectee', v)} />
-          <Toggle label="R3 — Capital libéré si coin lent" sub="Si le coin stagne, je prends profit et je libère le capital pour d'autres opportunités." value={form.r3_respectee as boolean} onChange={v => set('r3_respectee', v)} />
           <Toggle label="R4 — Perte limitée à -20%" sub="J'ai respecté mon stop loss, même si le coin a pumpé après." value={form.r4_respectee as boolean} onChange={v => set('r4_respectee', v)} />
           <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 0' }} />
           <Toggle label="SL touché" value={form.sl_touche as boolean} onChange={v => set('sl_touche', v)} />

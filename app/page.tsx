@@ -355,13 +355,13 @@ export default function Dashboard() {
             {/* Column headers */}
             <div className="mono" style={{
               display: 'grid',
-              gridTemplateColumns: '60px 1fr 70px 90px 60px 80px 24px',
+              gridTemplateColumns: '60px 1fr 90px 60px 80px 24px',
               gap: 10, padding: '7px 18px',
               fontSize: 9.5, color: 'var(--text-3)',
               textTransform: 'uppercase', letterSpacing: '0.12em',
               borderBottom: '1px solid var(--border)',
             }}>
-              <span>Date</span><span>Token</span><span>Type</span>
+              <span>Date</span><span>Token</span>
               <span style={{ textAlign: 'right' }}>PnL SOL</span>
               <span>Conv</span><span>Erreur</span><span />
             </div>
@@ -471,7 +471,7 @@ function TradeRow({ trade: t }: { trade: Trade }) {
       className="mono"
       style={{
         display: 'grid',
-        gridTemplateColumns: '60px 1fr 70px 90px 60px 80px 24px',
+        gridTemplateColumns: '60px 1fr 90px 60px 80px 24px',
         gap: 10,
         padding: '10px 18px',
         fontSize: 12,
@@ -489,7 +489,6 @@ function TradeRow({ trade: t }: { trade: Trade }) {
         <span style={{ fontWeight: 600, color: 'var(--text)' }}>{t.token}</span>
         {t.trade_aplus && <span style={{ fontSize: 9, color: 'var(--amber)', border: '1px solid var(--amber)', padding: '1px 4px', borderRadius: 3, fontWeight: 700, letterSpacing: '0.05em' }}>A+</span>}
       </span>
-      <span style={{ color: 'var(--text-3)', fontSize: 11 }}>{t.type_trade ?? '—'}</span>
       <span style={{ color: t.pnl_sol != null ? pnlColor(t.pnl_sol) : 'var(--text-4)', textAlign: 'right', fontWeight: 600 }}>
         {t.pnl_sol != null ? `${fmtPnl(t.pnl_sol)} SOL` : '—'}
       </span>

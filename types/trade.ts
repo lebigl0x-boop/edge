@@ -1,7 +1,5 @@
-export type TradeType = 'Early' | 'Breakout' | 'Momentum' | 'Rotation'
 export type QualityABC = 'A' | 'B' | 'C'
 export type Slippage = 'faible' | 'ok' | 'élevé'
-export type MarcheGlobal = 'bull' | 'neutre' | 'mort' | 'Bull' | 'Neutre' | 'Mort'
 export type Erreur =
   | 'Aucune'
   | 'FOMO'
@@ -31,7 +29,6 @@ export interface Trade {
   mc_cible: number | null
   rr_estime: number | null
   valide_avant_entree: boolean
-  type_trade: TradeType | null
   // 3. Exécution
   entry_qualite: QualityABC | null
   exit_qualite: QualityABC | null
@@ -39,7 +36,6 @@ export interface Trade {
   // 4. Discipline
   r1_respectee: boolean
   r2_respectee: boolean
-  r3_respectee: boolean
   r4_respectee: boolean
   // 5. Gestion
   sl_touche: boolean
@@ -53,7 +49,6 @@ export interface Trade {
   trade_aplus: boolean
   devait_etre_pris: boolean
   // 8. Contexte marché
-  marche_global: MarcheGlobal | null
   narrative_dominante: string
   // 9. Note rapide
   bien_fait: string

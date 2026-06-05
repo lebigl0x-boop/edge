@@ -33,13 +33,11 @@ export async function initSchema() {
       mc_cible            DOUBLE PRECISION,
       rr_estime           DOUBLE PRECISION,
       valide_avant_entree BOOLEAN DEFAULT false,
-      type_trade          TEXT,
       entry_qualite       TEXT,
       exit_qualite        TEXT,
       slippage            TEXT,
       r1_respectee        BOOLEAN DEFAULT false,
       r2_respectee        BOOLEAN DEFAULT false,
-      r3_respectee        BOOLEAN DEFAULT false,
       r4_respectee        BOOLEAN DEFAULT false,
       sl_touche           BOOLEAN DEFAULT false,
       coupe_bon_moment    BOOLEAN DEFAULT false,
@@ -49,7 +47,6 @@ export async function initSchema() {
       erreur_autre        TEXT DEFAULT '',
       trade_aplus         BOOLEAN DEFAULT false,
       devait_etre_pris    BOOLEAN DEFAULT false,
-      marche_global       TEXT,
       narrative_dominante TEXT DEFAULT '',
       bien_fait           TEXT DEFAULT '',
       ameliorer           TEXT DEFAULT '',
@@ -119,24 +116,24 @@ export async function createTrade(trade: Record<string, unknown>) {
       date, heure_entree, token,
       market_cap_entree, market_cap_sortie, taille, pnl_sol, pnl_percent,
       meme_narrative, pourquoi_pump, clarte, mc_cible, rr_estime,
-      valide_avant_entree, type_trade,
+      valide_avant_entree,
       entry_qualite, exit_qualite, slippage,
-      r1_respectee, r2_respectee, r3_respectee, r4_respectee,
+      r1_respectee, r2_respectee, r4_respectee,
       sl_touche, coupe_bon_moment, coin_lent, capital_libere,
       erreur, erreur_autre,
       trade_aplus, devait_etre_pris,
-      marche_global, narrative_dominante, bien_fait, ameliorer
+      narrative_dominante, bien_fait, ameliorer
     ) VALUES (
       ${g('date')}, ${g('heure_entree')}, ${g('token')},
       ${g('market_cap_entree')}, ${g('market_cap_sortie')}, ${g('taille')}, ${g('pnl_sol')}, ${g('pnl_percent')},
       ${g('meme_narrative')}, ${g('pourquoi_pump')}, ${g('clarte')}, ${g('mc_cible')}, ${g('rr_estime')},
-      ${g('valide_avant_entree')}, ${g('type_trade')},
+      ${g('valide_avant_entree')},
       ${g('entry_qualite')}, ${g('exit_qualite')}, ${g('slippage')},
-      ${g('r1_respectee')}, ${g('r2_respectee')}, ${g('r3_respectee')}, ${g('r4_respectee')},
+      ${g('r1_respectee')}, ${g('r2_respectee')}, ${g('r4_respectee')},
       ${g('sl_touche')}, ${g('coupe_bon_moment')}, ${g('coin_lent')}, ${g('capital_libere')},
       ${g('erreur')}, ${g('erreur_autre')},
       ${g('trade_aplus')}, ${g('devait_etre_pris')},
-      ${g('marche_global')}, ${g('narrative_dominante')}, ${g('bien_fait')}, ${g('ameliorer')}
+      ${g('narrative_dominante')}, ${g('bien_fait')}, ${g('ameliorer')}
     )
     RETURNING id
   `
@@ -157,12 +154,9 @@ export async function updateTrade(id: number, trade: Record<string, unknown>) {
       pnl_sol             = ${g('pnl_sol')},
       pnl_percent         = ${g('pnl_percent')},
       meme_narrative      = ${g('meme_narrative')},
-      type_trade          = ${g('type_trade')},
       entry_qualite       = ${g('entry_qualite')},
-      marche_global       = ${g('marche_global')},
       r1_respectee        = ${g('r1_respectee')},
       r2_respectee        = ${g('r2_respectee')},
-      r3_respectee        = ${g('r3_respectee')},
       r4_respectee        = ${g('r4_respectee')},
       sl_touche           = ${g('sl_touche')},
       coupe_bon_moment    = ${g('coupe_bon_moment')},
@@ -202,7 +196,7 @@ export async function deleteTrade(id: number) {
 
 export async function getStats(filter?: string) {
   const sql = getSql()
-  const cols = sql`SELECT pnl_sol, pnl_percent, trade_aplus, r1_respectee, r2_respectee, r3_respectee, r4_respectee, sl_touche, erreur`
+  const cols = sql`SELECT pnl_sol, pnl_percent, trade_aplus, r1_respectee, r2_respectee, r4_respectee, sl_touche, erreur`
   const wf = whereFragment(filter)
   let rows
   if (!filter || filter === 'all') {
@@ -217,9 +211,9 @@ export async function getStats(filter?: string) {
   const losses = rows.filter(r => Number(r.pnl_sol) < 0).length
   const aplus = rows.filter(r => r.trade_aplus).length
 
-  // KPIs discipline
+  // KPIs discipline (R1 + R2 + R4 = 3 règles)
   const disciplineScore = total > 0
-    ? rows.reduce((s, r) => s + [r.r1_respectee, r.r2_respectee, r.r3_respectee, r.r4_respectee].filter(Boolean).length / 4, 0) / total * 100
+    ? rows.reduce((s, r) => s + [r.r1_respectee, r.r2_respectee, r.r4_respectee].filter(Boolean).length / 3, 0) / total * 100
     : 0
   const slRespectRate = total > 0 ? rows.filter(r => r.r4_respectee).length / total * 100 : 0
   const slHitRate = total > 0 ? rows.filter(r => r.sl_touche).length / total * 100 : 0
@@ -254,7 +248,6 @@ export async function getAvailableMonths(): Promise<string[]> {
 
 export interface ChartData {
   equityCurve: { date: string; pnl: number; cumPnl: number }[]
-  byTradeType: { type: string; wins: number; losses: number; avgPnl: number }[]
   errorDistribution: { erreur: string; count: number }[]
   topTokens: { token: string; totalPnl: number; count: number }[]
   winRateByMonth: { month: string; winRate: number; count: number }[]
@@ -430,9 +423,7 @@ export async function validateDraft(id: number, updates: Record<string, unknown>
       taille              = COALESCE(${g('taille')}, taille),
       pnl_sol             = COALESCE(${g('pnl_sol')}, pnl_sol),
       pnl_percent         = COALESCE(${g('pnl_percent')}, pnl_percent),
-      type_trade          = COALESCE(${g('type_trade')}, type_trade),
       entry_qualite       = COALESCE(${g('entry_qualite')}, entry_qualite),
-      marche_global       = COALESCE(${g('marche_global')}, marche_global),
       erreur              = COALESCE(${g('erreur')}, erreur),
       bien_fait           = COALESCE(${g('bien_fait')}, bien_fait)
     WHERE id = ${id}
@@ -450,16 +441,11 @@ export async function getChartData(filter?: string): Promise<ChartData> {
   const wf = whereFragment(filter)
   const hasFilter = filter && filter !== 'all'
 
-  const [equityRows, typeRows, erreurRows, tokenRows, monthRows] = await Promise.all([
+  const [equityRows, erreurRows, tokenRows, monthRows] = await Promise.all([
     // Equity curve
     hasFilter
       ? sql`SELECT date, SUM(pnl_sol)::float AS pnl, SUM(SUM(pnl_sol)) OVER (ORDER BY date ASC)::float AS cum_pnl FROM trades WHERE pnl_sol IS NOT NULL ${wf} GROUP BY date ORDER BY date ASC`
       : sql`SELECT date, SUM(pnl_sol)::float AS pnl, SUM(SUM(pnl_sol)) OVER (ORDER BY date ASC)::float AS cum_pnl FROM trades WHERE pnl_sol IS NOT NULL GROUP BY date ORDER BY date ASC`,
-
-    // Par type de trade
-    hasFilter
-      ? sql`SELECT type_trade AS type, COUNT(*) FILTER (WHERE pnl_sol > 0)::int AS wins, COUNT(*) FILTER (WHERE pnl_sol < 0)::int AS losses, AVG(pnl_sol)::float AS avg_pnl FROM trades WHERE type_trade IS NOT NULL ${wf} GROUP BY type_trade`
-      : sql`SELECT type_trade AS type, COUNT(*) FILTER (WHERE pnl_sol > 0)::int AS wins, COUNT(*) FILTER (WHERE pnl_sol < 0)::int AS losses, AVG(pnl_sol)::float AS avg_pnl FROM trades WHERE type_trade IS NOT NULL GROUP BY type_trade`,
 
     // Erreurs
     hasFilter
@@ -477,7 +463,6 @@ export async function getChartData(filter?: string): Promise<ChartData> {
 
   return {
     equityCurve: equityRows.map(r => ({ date: r.date as string, pnl: Number(r.pnl ?? 0), cumPnl: Number(r.cum_pnl ?? 0) })),
-    byTradeType: typeRows.map(r => ({ type: r.type as string, wins: Number(r.wins ?? 0), losses: Number(r.losses ?? 0), avgPnl: Number(r.avg_pnl ?? 0) })),
     errorDistribution: erreurRows.map(r => ({ erreur: r.erreur as string, count: Number(r.count ?? 0) })),
     topTokens: tokenRows.map(r => ({ token: r.token as string, totalPnl: Number(r.total_pnl ?? 0), count: Number(r.count ?? 0) })),
     winRateByMonth: monthRows.map(r => ({ month: r.month as string, winRate: Number(r.win_rate ?? 0), count: Number(r.count ?? 0) })),

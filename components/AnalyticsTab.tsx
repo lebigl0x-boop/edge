@@ -70,12 +70,6 @@ export default function AnalyticsTab({ data }: { data: ChartData | null }) {
   }, 0)
 
   // BarRows data from ChartData
-  const byTypeRows = data.byTradeType.map(r => ({
-    label: r.type,
-    count: r.wins + r.losses,
-    pnl: r.avgPnl * (r.wins + r.losses),
-  })).sort((a, b) => b.pnl - a.pnl)
-
   const topTokenRows = data.topTokens.map(r => ({
     label: r.token,
     count: r.count,
@@ -146,11 +140,6 @@ export default function AnalyticsTab({ data }: { data: ChartData | null }) {
 
       {/* 2×2 grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-
-        <Card>
-          <SectionTitle>Performance par type</SectionTitle>
-          {byTypeRows.length === 0 ? <Empty /> : <BarRows rows={byTypeRows} />}
-        </Card>
 
         <Card>
           <SectionTitle>Top tokens</SectionTitle>

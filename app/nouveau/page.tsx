@@ -100,13 +100,10 @@ export default function NouveauTrade() {
     market_cap_sortie: '',
     taille: '',
     pnl_sol: '',
-    type_trade: '',
     meme_narrative: '',
     entry_qualite: '',
-    marche_global: '',
     r1_respectee: false,
     r2_respectee: false,
-    r3_respectee: false,
     r4_respectee: false,
     sl_touche: false,
     coupe_bon_moment: false,
@@ -187,7 +184,6 @@ export default function NouveauTrade() {
   const disciplines = [
     { k: 'r1_respectee', l: 'R1 Narrative' },
     { k: 'r2_respectee', l: 'R2 ATH cible' },
-    { k: 'r3_respectee', l: 'R3 Capital libéré' },
     { k: 'r4_respectee', l: 'R4 SL −20%' },
   ] as const
 
@@ -312,27 +308,13 @@ export default function NouveauTrade() {
           </div>
         </div>
 
-        {/* Conviction · Type · Marché */}
+        {/* Conviction · Narrative */}
         <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <PillRow
             label="Conviction"
             options={['A · Forte', 'B · Moyenne', 'C · Faible']}
             value={convLabel}
             onChange={v => set('entry_qualite', convictionMap[v] ?? '')}
-            colors={['green', 'amber', 'red']}
-          />
-          <PillRow
-            label="Type"
-            options={['Early', 'Breakout', 'Momentum', 'Rotation']}
-            value={form.type_trade as string}
-            onChange={v => set('type_trade', v)}
-            colors={['accent', 'accent', 'accent', 'accent']}
-          />
-          <PillRow
-            label="Marché"
-            options={['Bull', 'Neutre', 'Mort']}
-            value={form.marche_global as string}
-            onChange={v => set('marche_global', v)}
             colors={['green', 'amber', 'red']}
           />
           <div>
@@ -360,9 +342,9 @@ export default function NouveauTrade() {
         {/* Discipline */}
         <div style={{ padding: '18px 20px 12px' }}>
           <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>
-            Discipline · 4 règles
+            Discipline · 3 règles
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             {disciplines.map(r => {
               const on = form[r.k] as boolean
               return (
