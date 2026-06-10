@@ -67,6 +67,8 @@ export interface Trade {
   fees_sol: number
   sol_received: number
   fees_total: number
+  // Cycle
+  cycle: string | null   // 'cycle-1' | 'v1-historique' | null
   // Meta
   created_at: string
 }

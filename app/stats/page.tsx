@@ -55,22 +55,33 @@ function StatRow({ label, value, sub, color }: { label: string; value: string; s
 }
 
 type Period = 'week' | 'month' | 'all'
+type CycleFilter = 'cycle-1' | 'v1-historique' | 'all'
+
+const CYCLE_OPTIONS: { key: CycleFilter; label: string }[] = [
+  { key: 'cycle-1', label: 'Cycle 1' },
+  { key: 'v1-historique', label: 'Historique v1' },
+  { key: 'all', label: 'Tous' },
+]
 
 export default function StatsPage() {
   const [period, setPeriod] = useState<Period>('month')
+  const [cycle, setCycle] = useState<CycleFilter>('cycle-1')
   const [stats, setStats] = useState<AdvancedStats | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
     setStats(null)
-    const qs = period !== 'all' ? `?filter=${period}` : ''
-    fetch(`/api/stats/advanced${qs}`)
+    const qs = new URLSearchParams()
+    if (period !== 'all') qs.set('filter', period)
+    if (cycle !== 'all') qs.set('cycle', cycle)
+    const q = qs.toString() ? `?${qs}` : ''
+    fetch(`/api/stats/advanced${q}`)
       .then(r => r.json())
       .then(setStats)
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [period])
+  }, [period, cycle])
 
   const periodLabel = period === 'week' ? '7 jours' : period === 'month' ? '30 jours' : 'Tout'
 
@@ -83,13 +94,25 @@ export default function StatsPage() {
           <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 4 }}>Stats avancées</h1>
           <p style={{ fontSize: 12, color: 'var(--text-3)' }}>Analyse comportementale · v2</p>
         </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Cycle */}
+          <div style={{ display: 'flex', gap: 3, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 7, padding: 3 }}>
+            {CYCLE_OPTIONS.map(c => (
+              <button key={c.key} onClick={() => setCycle(c.key)} style={{
+                background: cycle === c.key ? 'var(--surface-3)' : 'transparent',
+                color: cycle === c.key ? 'var(--text)' : 'var(--text-3)',
+                border: 'none', borderRadius: 5, padding: '4px 10px', fontSize: 11, cursor: 'pointer',
+                fontFamily: "'JetBrains Mono', monospace", fontWeight: 600,
+              }}>{c.label}</button>
+            ))}
+          </div>
+          {/* Période */}
           {(['week', 'month', 'all'] as Period[]).map(p => (
             <button key={p} onClick={() => setPeriod(p)} style={{
               background: period === p ? 'var(--surface-3)' : 'var(--surface-1)',
               color: period === p ? 'var(--text)' : 'var(--text-3)',
               border: `1px solid ${period === p ? 'var(--border-strong)' : 'var(--border)'}`,
-              borderRadius: 6, padding: '5px 12px', fontSize: 11, cursor: 'pointer',
+              borderRadius: 6, padding: '5px 10px', fontSize: 11, cursor: 'pointer',
               fontFamily: "'JetBrains Mono', monospace", fontWeight: 600,
             }}>
               {p === 'week' ? '7D' : p === 'month' ? '30D' : 'ALL'}

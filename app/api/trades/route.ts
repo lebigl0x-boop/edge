@@ -4,7 +4,8 @@ import { getAllTrades, createTrade } from '@/lib/db'
 export async function GET(req: NextRequest) {
   try {
     const filter = req.nextUrl.searchParams.get('filter') ?? undefined
-    const trades = await getAllTrades(filter)
+    const cycle = req.nextUrl.searchParams.get('cycle') ?? undefined
+    const trades = await getAllTrades(filter, cycle)
     return NextResponse.json(trades)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

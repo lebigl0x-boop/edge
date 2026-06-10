@@ -86,9 +86,22 @@ export async function initSchema() {
   await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS vente_dans_plan BOOLEAN`
   await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS plan_sortie TEXT`
   await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS pre_trade_saisi_a TIMESTAMPTZ`
+
+  // ── Cycles ────────────────────────────────────────────────────────────────────
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS cycle TEXT`
+  // Backfill : tous les trades sans cycle → v1-historique
+  await sql`UPDATE trades SET cycle = 'v1-historique' WHERE cycle IS NULL`
+  // Cycle courant dans wallet_settings
+  await sql`ALTER TABLE wallet_settings ADD COLUMN IF NOT EXISTS current_cycle TEXT DEFAULT 'cycle-1'`
+  // S'assurer qu'au moins une ligne existe dans wallet_settings pour stocker current_cycle
+  await sql`
+    INSERT INTO wallet_settings (wallet_address, current_cycle)
+    SELECT '', 'cycle-1'
+    WHERE NOT EXISTS (SELECT 1 FROM wallet_settings)
+  `
 }
 
-// Fragment WHERE à embarquer dans les tagged templates
+// Fragment WHERE période (date)
 function whereFragment(filter?: string) {
   const sql = getSql()
   if (!filter || filter === 'all') return sql.unsafe('')
@@ -100,13 +113,26 @@ function whereFragment(filter?: string) {
   return sql.unsafe('')
 }
 
-export async function getAllTrades(filter?: string) {
+// Fragment WHERE cycle
+function cycleFragment(cycle?: string | null) {
+  const sql = getSql()
+  if (!cycle || cycle === 'all') return sql.unsafe('')
+  // Valeur sûre : seuls les identifiants alphanum-tiret acceptés
+  if (/^[a-zA-Z0-9-]+$/.test(cycle)) return sql.unsafe(`AND cycle = '${cycle}'`)
+  return sql.unsafe('')
+}
+
+export async function getCurrentCycle(): Promise<string> {
+  const sql = getSql()
+  const rows = await sql`SELECT current_cycle FROM wallet_settings ORDER BY id ASC LIMIT 1`
+  return (rows[0]?.current_cycle as string) ?? 'cycle-1'
+}
+
+export async function getAllTrades(filter?: string, cycle?: string | null) {
   const sql = getSql()
   const wf = whereFragment(filter)
-  if (!filter || filter === 'all') {
-    return await sql`SELECT * FROM trades WHERE draft IS NOT TRUE ORDER BY date DESC, created_at DESC`
-  }
-  return await sql`SELECT * FROM trades WHERE 1=1 AND (draft IS NOT TRUE) ${wf} ORDER BY date DESC, created_at DESC`
+  const cf = cycleFragment(cycle)
+  return await sql`SELECT * FROM trades WHERE draft IS NOT TRUE ${wf} ${cf} ORDER BY date DESC, created_at DESC`
 }
 
 export async function getTradeById(id: number) {
@@ -206,31 +232,23 @@ export async function deleteTrade(id: number) {
   await sql`DELETE FROM trades WHERE id = ${id}`
 }
 
-export async function getStats(filter?: string) {
+export async function getStats(filter?: string, cycle?: string | null) {
   const sql = getSql()
-  const cols = sql`SELECT pnl_sol, pnl_percent, trade_aplus, r1_respectee, r2_respectee, r4_respectee, sl_touche, erreur`
   const wf = whereFragment(filter)
-  let rows
-  if (!filter || filter === 'all') {
-    rows = await sql`${cols} FROM trades WHERE draft IS NOT TRUE`
-  } else {
-    rows = await sql`${cols} FROM trades WHERE (draft IS NOT TRUE) ${wf}`
-  }
+  const cf = cycleFragment(cycle)
+  const rows = await sql`
+    SELECT pnl_sol, trade_aplus, r1_respectee, r2_respectee, r4_respectee,
+           sl_touche, erreur, vente_dans_plan,
+           market_cap_entree, market_cap_sortie, ath_constate, taille
+    FROM trades
+    WHERE draft IS NOT TRUE ${wf} ${cf}
+  `
 
   const total = rows.length
   const totalPnl = rows.reduce((s, r) => s + (Number(r.pnl_sol) || 0), 0)
   const wins = rows.filter(r => Number(r.pnl_sol) > 0).length
   const losses = rows.filter(r => Number(r.pnl_sol) < 0).length
   const aplus = rows.filter(r => r.trade_aplus).length
-
-  // KPIs discipline (R1 + R2 + R4 = 3 règles)
-  const disciplineScore = total > 0
-    ? rows.reduce((s, r) => s + [r.r1_respectee, r.r2_respectee, r.r4_respectee].filter(Boolean).length / 3, 0) / total * 100
-    : 0
-  const slRespectRate = total > 0 ? rows.filter(r => r.r4_respectee).length / total * 100 : 0
-  const slHitRate = total > 0 ? rows.filter(r => r.sl_touche).length / total * 100 : 0
-  const errorRate = total > 0 ? rows.filter(r => r.erreur && r.erreur !== 'Aucune').length / total * 100 : 0
-  const aplusRate = total > 0 ? aplus / total * 100 : 0
 
   // RR Réel
   const winPnls = rows.filter(r => Number(r.pnl_sol) > 0).map(r => Number(r.pnl_sol))
@@ -239,11 +257,41 @@ export async function getStats(filter?: string) {
   const avgLoss = lossPnls.length > 0 ? Math.abs(lossPnls.reduce((s, v) => s + v, 0) / lossPnls.length) : 0
   const rrReel = avgLoss > 0 ? avgWin / avgLoss : null
 
+  // KPIs v2
+  const avecPlan = rows.filter(r => r.vente_dans_plan !== null && r.vente_dans_plan !== undefined)
+  const dansPlan = avecPlan.filter(r => r.vente_dans_plan === true).length
+  const venteDansPlanPct = avecPlan.length > 0 ? dansPlan / avecPlan.length * 100 : null
+
+  let coutSortiesPrematurees = 0
+  for (const r of rows) {
+    const mcS = Number(r.market_cap_sortie ?? 0)
+    const mcE = Number(r.market_cap_entree ?? 0)
+    const ath = Number(r.ath_constate ?? 0)
+    const taille = Number(r.taille ?? 0)
+    if (ath > mcS && mcE > 0 && taille > 0) {
+      coutSortiesPrematurees += taille * ((ath / mcE) - (mcS / mcE))
+    }
+  }
+
+  // KPIs v1 (pour historique)
+  const disciplineScore = total > 0
+    ? rows.reduce((s, r) => s + [r.r1_respectee, r.r2_respectee, r.r4_respectee].filter(Boolean).length / 3, 0) / total * 100
+    : 0
+  const slRespectRate = total > 0 ? rows.filter(r => r.r4_respectee).length / total * 100 : 0
+  const slHitRate = total > 0 ? rows.filter(r => r.sl_touche).length / total * 100 : 0
+  const errorRate = total > 0 ? rows.filter(r => r.erreur && r.erreur !== 'Aucune').length / total * 100 : 0
+  const aplusRate = total > 0 ? aplus / total * 100 : 0
+
   return {
     total, totalPnl, wins, losses, aplus,
     avgPnl: total > 0 ? totalPnl / total : 0,
     winRate: total > 0 ? (wins / total) * 100 : 0,
-    disciplineScore, slRespectRate, slHitRate, errorRate, aplusRate, rrReel,
+    rrReel,
+    // v2
+    venteDansPlanPct,
+    coutSortiesPrematurees: Math.round(coutSortiesPrematurees * 1000) / 1000,
+    // v1 (historique)
+    disciplineScore, slRespectRate, slHitRate, errorRate, aplusRate,
   }
 }
 
@@ -466,13 +514,15 @@ export interface PreTradeInput {
 
 export async function createPreTrade(data: PreTradeInput): Promise<number> {
   const sql = getSql()
+  // Récupère le cycle courant pour l'attacher au nouveau trade
+  const currentCycle = await getCurrentCycle()
   const rows = await sql`
     INSERT INTO trades (
       token, meme_narrative, entry_qualite,
       pourquoi_pump, mc_cible, mc_invalidation, plan_sortie,
       taille, market_cap_entree,
       date, heure_entree,
-      draft, pre_trade_saisi_a
+      draft, pre_trade_saisi_a, cycle
     ) VALUES (
       ${data.token},
       ${data.meme_narrative},
@@ -486,7 +536,8 @@ export async function createPreTrade(data: PreTradeInput): Promise<number> {
       ${data.date},
       ${data.heure_entree},
       true,
-      NOW()
+      NOW(),
+      ${currentCycle}
     )
     RETURNING id
   `
@@ -519,26 +570,18 @@ export interface AdvancedStats {
   completionRate: number
 }
 
-export async function getAdvancedStats(filter?: string): Promise<AdvancedStats> {
+export async function getAdvancedStats(filter?: string, cycle?: string | null): Promise<AdvancedStats> {
   const sql = getSql()
   const wf = whereFragment(filter)
-  const hasFilter = filter && filter !== 'all'
+  const cf = cycleFragment(cycle)
 
-  const rows = hasFilter
-    ? await sql`
-        SELECT pnl_sol, meme_narrative, entry_qualite, market_cap_entree,
-               ath_constate, market_cap_sortie, taille,
-               vente_dans_plan, pre_trade_saisi_a
-        FROM trades
-        WHERE draft IS NOT TRUE ${wf}
-      `
-    : await sql`
-        SELECT pnl_sol, meme_narrative, entry_qualite, market_cap_entree,
-               ath_constate, market_cap_sortie, taille,
-               vente_dans_plan, pre_trade_saisi_a
-        FROM trades
-        WHERE draft IS NOT TRUE
-      `
+  const rows = await sql`
+    SELECT pnl_sol, meme_narrative, entry_qualite, market_cap_entree,
+           ath_constate, market_cap_sortie, taille,
+           vente_dans_plan, pre_trade_saisi_a
+    FROM trades
+    WHERE draft IS NOT TRUE ${wf} ${cf}
+  `
 
   const total = rows.length
 
@@ -647,42 +690,31 @@ export async function getAdvancedStats(filter?: string): Promise<AdvancedStats> 
 
 // ─── Stats du jour ────────────────────────────────────────────────────────────
 
-export async function getTodayStats(): Promise<{ count: number; pnl: number }> {
+export async function getTodayStats(cycle?: string | null): Promise<{ count: number; losses: number; pnl: number }> {
   const sql = getSql()
   const today = new Date().toISOString().slice(0, 10)
+  const cf = cycleFragment(cycle)
   const rows = await sql`
     SELECT pnl_sol FROM trades
-    WHERE draft IS NOT TRUE AND date = ${today}
+    WHERE draft IS NOT TRUE AND date = ${today} ${cf}
   `
   return {
     count: rows.length,
+    losses: rows.filter(r => Number(r.pnl_sol) < 0).length,
     pnl: rows.reduce((s, r) => s + (Number(r.pnl_sol) || 0), 0),
   }
 }
 
-export async function getChartData(filter?: string): Promise<ChartData> {
+export async function getChartData(filter?: string, cycle?: string | null): Promise<ChartData> {
   const sql = getSql()
   const wf = whereFragment(filter)
-  const hasFilter = filter && filter !== 'all'
+  const cf = cycleFragment(cycle)
 
   const [equityRows, erreurRows, tokenRows, monthRows] = await Promise.all([
-    // Equity curve
-    hasFilter
-      ? sql`SELECT date, SUM(pnl_sol)::float AS pnl, SUM(SUM(pnl_sol)) OVER (ORDER BY date ASC)::float AS cum_pnl FROM trades WHERE pnl_sol IS NOT NULL ${wf} GROUP BY date ORDER BY date ASC`
-      : sql`SELECT date, SUM(pnl_sol)::float AS pnl, SUM(SUM(pnl_sol)) OVER (ORDER BY date ASC)::float AS cum_pnl FROM trades WHERE pnl_sol IS NOT NULL GROUP BY date ORDER BY date ASC`,
-
-    // Erreurs
-    hasFilter
-      ? sql`SELECT erreur, COUNT(*)::int AS count FROM trades WHERE erreur IS NOT NULL AND erreur != '' ${wf} GROUP BY erreur ORDER BY count DESC`
-      : sql`SELECT erreur, COUNT(*)::int AS count FROM trades WHERE erreur IS NOT NULL AND erreur != '' GROUP BY erreur ORDER BY count DESC`,
-
-    // Top tokens
-    hasFilter
-      ? sql`SELECT token, SUM(pnl_sol)::float AS total_pnl, COUNT(*)::int AS count FROM trades WHERE pnl_sol IS NOT NULL ${wf} GROUP BY token ORDER BY total_pnl DESC LIMIT 10`
-      : sql`SELECT token, SUM(pnl_sol)::float AS total_pnl, COUNT(*)::int AS count FROM trades WHERE pnl_sol IS NOT NULL GROUP BY token ORDER BY total_pnl DESC LIMIT 10`,
-
-    // Win rate par mois (toujours sur tout pour voir la tendance globale)
-    sql`SELECT SUBSTRING(date, 1, 7) AS month, ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_sol > 0) / NULLIF(COUNT(*), 0), 1)::float AS win_rate, COUNT(*)::int AS count FROM trades WHERE pnl_sol IS NOT NULL AND LENGTH(date) >= 7 GROUP BY SUBSTRING(date, 1, 7) ORDER BY month ASC`,
+    sql`SELECT date, SUM(pnl_sol)::float AS pnl, SUM(SUM(pnl_sol)) OVER (ORDER BY date ASC)::float AS cum_pnl FROM trades WHERE pnl_sol IS NOT NULL ${wf} ${cf} GROUP BY date ORDER BY date ASC`,
+    sql`SELECT erreur, COUNT(*)::int AS count FROM trades WHERE erreur IS NOT NULL AND erreur != '' ${wf} ${cf} GROUP BY erreur ORDER BY count DESC`,
+    sql`SELECT token, SUM(pnl_sol)::float AS total_pnl, COUNT(*)::int AS count FROM trades WHERE pnl_sol IS NOT NULL ${wf} ${cf} GROUP BY token ORDER BY total_pnl DESC LIMIT 10`,
+    sql`SELECT SUBSTRING(date, 1, 7) AS month, ROUND(100.0 * COUNT(*) FILTER (WHERE pnl_sol > 0) / NULLIF(COUNT(*), 0), 1)::float AS win_rate, COUNT(*)::int AS count FROM trades WHERE pnl_sol IS NOT NULL AND LENGTH(date) >= 7 ${cf} GROUP BY SUBSTRING(date, 1, 7) ORDER BY month ASC`,
   ])
 
   return {
