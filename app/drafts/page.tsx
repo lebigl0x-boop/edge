@@ -186,7 +186,7 @@ export default function DraftsPage() {
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                     <Link
-                      href={`/trade/${draft.id}/edit`}
+                      href={`/drafts/${draft.id}/complete`}
                       style={{
                         background: 'var(--text)', color: 'var(--bg)',
                         border: 'none', borderRadius: 6,

@@ -96,9 +96,9 @@ export async function fetchTokenInfo(mintAddress: string): Promise<TokenInfo> {
     if (res.ok) {
       const data = await res.json() as { complete?: boolean; usd_market_cap?: number; symbol?: string }
       if (data.usd_market_cap && data.usd_market_cap > 0) {
-        // usd_market_cap est en millions → convertir en k$ (* 1000)
+        // usd_market_cap est en USD → convertir en k$ (/ 1000)
         return {
-          mc: Math.round(data.usd_market_cap * 1000 * 100) / 100,
+          mc: Math.round(data.usd_market_cap / 1000 * 100) / 100,
           symbol: data.symbol ?? null,
         }
       }

@@ -22,18 +22,22 @@ export interface Trade {
   taille: number | null
   pnl_sol: number | null
   pnl_percent: number | null
-  // 2. Contexte & Setup
+  // 2. Contexte & Setup (pré-trade)
   meme_narrative: string
-  pourquoi_pump: string
-  clarte: number | null // 1-5
-  mc_cible: number | null
+  pourquoi_pump: string          // "Pourquoi ça pump" — obligatoire v2
+  mc_cible: number | null        // MC cible en k$ — obligatoire v2
+  mc_invalidation: number | null // MC invalidation en k$ — nouveau v2
+  plan_sortie: string | null     // Plan de sortie texte — nouveau v2
+  pre_trade_saisi_a: string | null // Horodatage saisie pré-trade — nouveau v2
+  // Anciens champs (conservés pour rétrocompatibilité, hors formulaire v2)
+  clarte: number | null
   rr_estime: number | null
   valide_avant_entree: boolean
   // 3. Exécution
   entry_qualite: QualityABC | null
   exit_qualite: QualityABC | null
   slippage: Slippage | null
-  // 4. Discipline
+  // 4. Discipline (R1+R2 remplacés par pré-trade, R4 remplacé par mc_invalidation)
   r1_respectee: boolean
   r2_respectee: boolean
   r4_respectee: boolean
@@ -42,17 +46,27 @@ export interface Trade {
   coupe_bon_moment: boolean
   coin_lent: boolean
   capital_libere: boolean
-  // 6. Erreur
+  // 6. Post-trade
+  ath_constate: number | null    // ATH MC constaté après le trade — nouveau v2
+  vente_dans_plan: boolean | null // La sortie a suivi le plan — nouveau v2
+  // 7. Erreur
   erreur: Erreur
   erreur_autre: string
-  // 7. Qualité
+  // 8. Qualité
   trade_aplus: boolean
   devait_etre_pris: boolean
-  // 8. Contexte marché
+  // 9. Contexte marché (legacy)
   narrative_dominante: string
-  // 9. Note rapide
+  // 10. Note rapide
   bien_fait: string
   ameliorer: string
+  // Auto-import
+  draft: boolean
+  tx_signature: string | null
+  token_address: string | null
+  fees_sol: number
+  sol_received: number
+  fees_total: number
   // Meta
   created_at: string
 }

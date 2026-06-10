@@ -52,12 +52,14 @@ export default function Dashboard() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [draftCount, setDraftCount] = useState(0)
+  const [todayStats, setTodayStats] = useState<{ count: number; pnl: number } | null>(null)
 
-  // Sync trades + refresh draft count — au chargement et toutes les 60s
+  // Sync trades + refresh draft count + today stats — au chargement et toutes les 60s
   useEffect(() => {
     function syncAndRefresh() {
       fetch('/api/cron/sync-trades').catch(() => {})
       fetch('/api/drafts/count').then(r => r.json()).then((d: { count: number }) => setDraftCount(d.count ?? 0)).catch(() => {})
+      fetch('/api/today').then(r => r.json()).then((d: { count: number; pnl: number }) => setTodayStats(d)).catch(() => {})
     }
     syncAndRefresh()
     const interval = setInterval(syncAndRefresh, 60_000)
@@ -187,6 +189,97 @@ export default function Dashboard() {
           <span className="mono" style={{ fontSize: 12, color: 'var(--amber)', opacity: 0.7 }}>Voir →</span>
         </Link>
       )}
+
+      {/* Today counter + Stop journalier */}
+      {todayStats !== null && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          padding: '10px 16px', marginBottom: 14,
+          background: todayStats.pnl <= -1
+            ? 'oklch(0.68 0.21 22 / 0.10)'
+            : 'var(--surface-1)',
+          border: `1px solid ${todayStats.pnl <= -1 ? 'oklch(0.68 0.21 22 / 0.35)' : 'var(--border)'}`,
+          borderRadius: 10,
+        }}>
+          <span className="mono" style={{ fontSize: 12, color: 'var(--text-3)' }}>Aujourd&apos;hui</span>
+          {/* Trades count */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {[1, 2, 3, 4].map(n => (
+              <div key={n} style={{
+                width: 10, height: 10, borderRadius: 3,
+                background: n <= todayStats.count ? 'var(--accent)' : 'var(--surface-3)',
+                border: `1px solid ${n <= todayStats.count ? 'var(--accent)' : 'var(--border)'}`,
+              }} />
+            ))}
+            <span className="mono" style={{ fontSize: 12, color: 'var(--text-2)', marginLeft: 2 }}>
+              {todayStats.count}/4 trades
+            </span>
+          </div>
+          {/* PnL du jour */}
+          <span className="mono" style={{
+            fontSize: 13, fontWeight: 700,
+            color: todayStats.pnl <= -1 ? 'var(--red)' : pnlColor(todayStats.pnl),
+          }}>
+            {todayStats.pnl >= 0 ? '+' : ''}{todayStats.pnl.toFixed(3)} SOL
+          </span>
+          {todayStats.pnl <= -1 && (
+            <span style={{
+              fontSize: 11, fontWeight: 700, color: 'var(--red)',
+              background: 'oklch(0.68 0.21 22 / 0.15)',
+              border: '1px solid oklch(0.68 0.21 22 / 0.3)',
+              borderRadius: 5, padding: '2px 8px',
+            }}>
+              STOP JOURNALIER ↑
+            </span>
+          )}
+          {todayStats.count >= 4 && (
+            <span style={{
+              fontSize: 11, fontWeight: 700, color: 'var(--amber)',
+              background: 'oklch(0.78 0.14 70 / 0.10)',
+              border: '1px solid oklch(0.78 0.14 70 / 0.25)',
+              borderRadius: 5, padding: '2px 8px',
+            }}>
+              MAX 4 trades atteint
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Règles de session */}
+      <details style={{ marginBottom: 14 }}>
+        <summary style={{
+          cursor: 'pointer', listStyle: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 16px',
+          background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10,
+          fontSize: 12, fontWeight: 600, color: 'var(--text-2)',
+          userSelect: 'none',
+        }}>
+          <span>📋 Règles de session</span>
+          <span className="mono" style={{ fontSize: 10, color: 'var(--text-4)' }}>▾</span>
+        </summary>
+        <div style={{
+          marginTop: 4,
+          background: 'var(--surface-1)', border: '1px solid var(--border)',
+          borderRadius: 10, padding: '14px 16px',
+          display: 'flex', flexDirection: 'column', gap: 7,
+        }}>
+          {[
+            ['1', 'Aucun buy sans saisie pré-trade complète'],
+            ['2', '2 tailles : 0.2 SOL standard · 0.5 SOL conviction A+ — plafond 10 % du stack'],
+            ['3', '50 % vendus à 2x, systématique'],
+            ['4', 'Jamais de market sell dans une bougie rouge, sauf invalidation touchée'],
+            ['5', 'Stop catastrophe −50 %, non négociable'],
+            ['6', 'Une re-entrée max par narrative, sur nouveau catalyseur uniquement'],
+            ['7', 'Max 4 trades/jour — stop journalier à −1 SOL — pause 30 min après perte > 0.2 SOL'],
+          ].map(([n, rule]) => (
+            <div key={n} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, minWidth: 14, marginTop: 2 }}>{n}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>{rule}</span>
+            </div>
+          ))}
+        </div>
+      </details>
 
       {/* Hero strip */}
       <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 14, marginBottom: 14 }}>

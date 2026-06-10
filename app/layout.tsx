@@ -51,6 +51,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
             <SolanaBalance />
             <FeesMenu />
+            <Link href="/stats" style={{
+              background: 'transparent',
+              color: 'var(--text-3)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '5px 10px',
+              fontSize: 12,
+              cursor: 'pointer',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+            }}>Stats</Link>
             <Link href="/settings" style={{
               background: 'transparent',
               color: 'var(--text-3)',

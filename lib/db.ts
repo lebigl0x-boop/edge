@@ -79,6 +79,13 @@ export async function initSchema() {
     )
   `
   await sql`ALTER TABLE wallet_settings ADD COLUMN IF NOT EXISTS last_tx_signature TEXT`
+
+  // ── Colonnes v2 (pré-engagement) ─────────────────────────────────────────────
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS mc_invalidation DOUBLE PRECISION`
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS ath_constate DOUBLE PRECISION`
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS vente_dans_plan BOOLEAN`
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS plan_sortie TEXT`
+  await sql`ALTER TABLE trades ADD COLUMN IF NOT EXISTS pre_trade_saisi_a TIMESTAMPTZ`
 }
 
 // Fragment WHERE à embarquer dans les tagged templates
@@ -154,12 +161,17 @@ export async function updateTrade(id: number, trade: Record<string, unknown>) {
       pnl_sol             = ${g('pnl_sol')},
       pnl_percent         = ${g('pnl_percent')},
       meme_narrative      = ${g('meme_narrative')},
+      pourquoi_pump       = ${g('pourquoi_pump')},
+      mc_cible            = ${g('mc_cible')},
+      mc_invalidation     = ${g('mc_invalidation')},
+      plan_sortie         = ${g('plan_sortie')},
+      ath_constate        = ${g('ath_constate')},
+      vente_dans_plan     = ${g('vente_dans_plan')},
       entry_qualite       = ${g('entry_qualite')},
       r1_respectee        = ${g('r1_respectee')},
       r2_respectee        = ${g('r2_respectee')},
       r4_respectee        = ${g('r4_respectee')},
       sl_touche           = ${g('sl_touche')},
-      coupe_bon_moment    = ${g('coupe_bon_moment')},
       coin_lent           = ${g('coin_lent')},
       erreur              = ${g('erreur')},
       erreur_autre        = ${g('erreur_autre')},
@@ -434,6 +446,218 @@ export async function getDraftCount(): Promise<number> {
   const sql = getSql()
   const rows = await sql`SELECT COUNT(*)::int AS count FROM trades WHERE draft = true`
   return Number(rows[0]?.count ?? 0)
+}
+
+// ─── Pré-trade v2 ─────────────────────────────────────────────────────────────
+
+export interface PreTradeInput {
+  token: string
+  meme_narrative: string
+  entry_qualite: string  // A / B / C
+  pourquoi_pump: string
+  mc_cible: number
+  mc_invalidation: number
+  plan_sortie: string
+  taille: number
+  market_cap_entree?: number | null  // estimé à l'entrée (optionnel)
+  date: string
+  heure_entree: string
+}
+
+export async function createPreTrade(data: PreTradeInput): Promise<number> {
+  const sql = getSql()
+  const rows = await sql`
+    INSERT INTO trades (
+      token, meme_narrative, entry_qualite,
+      pourquoi_pump, mc_cible, mc_invalidation, plan_sortie,
+      taille, market_cap_entree,
+      date, heure_entree,
+      draft, pre_trade_saisi_a
+    ) VALUES (
+      ${data.token},
+      ${data.meme_narrative},
+      ${data.entry_qualite},
+      ${data.pourquoi_pump},
+      ${data.mc_cible},
+      ${data.mc_invalidation},
+      ${data.plan_sortie},
+      ${data.taille},
+      ${data.market_cap_entree ?? null},
+      ${data.date},
+      ${data.heure_entree},
+      true,
+      NOW()
+    )
+    RETURNING id
+  `
+  return rows[0].id as number
+}
+
+// ─── Stats avancées v2 ────────────────────────────────────────────────────────
+
+export interface AdvancedStats {
+  // Discipline plan
+  tradesAvecPlan: number
+  tradesDansPlan: number
+  tradesHorsPlan: number
+  pnlDansPlan: number
+  pnlHorsPlan: number
+  winrateDansPlan: number
+  winrateHorsPlan: number
+  // Gains laissés sur la table
+  coutSortiesPrematurees: number
+  nbSortiesPrematurees: number
+  // Par narrative
+  parNarrative: { narrative: string; count: number; pnl: number; winrate: number }[]
+  // Par conviction
+  parConviction: { conviction: string; count: number; pnl: number; winrate: number }[]
+  // Par tranche de MC
+  parMcRange: { range: string; count: number; pnl: number; winrate: number }[]
+  // Taux de complétion pré-trade
+  totalTrades: number
+  tradesAvecPreTrade: number
+  completionRate: number
+}
+
+export async function getAdvancedStats(filter?: string): Promise<AdvancedStats> {
+  const sql = getSql()
+  const wf = whereFragment(filter)
+  const hasFilter = filter && filter !== 'all'
+
+  const rows = hasFilter
+    ? await sql`
+        SELECT pnl_sol, meme_narrative, entry_qualite, market_cap_entree,
+               ath_constate, market_cap_sortie, taille,
+               vente_dans_plan, pre_trade_saisi_a
+        FROM trades
+        WHERE draft IS NOT TRUE ${wf}
+      `
+    : await sql`
+        SELECT pnl_sol, meme_narrative, entry_qualite, market_cap_entree,
+               ath_constate, market_cap_sortie, taille,
+               vente_dans_plan, pre_trade_saisi_a
+        FROM trades
+        WHERE draft IS NOT TRUE
+      `
+
+  const total = rows.length
+
+  // Discipline plan
+  const avecPlan = rows.filter(r => r.vente_dans_plan !== null && r.vente_dans_plan !== undefined)
+  const dansPlan = avecPlan.filter(r => r.vente_dans_plan === true)
+  const horsPlan = avecPlan.filter(r => r.vente_dans_plan === false)
+
+  const pnlSum = (arr: typeof rows) => arr.reduce((s, r) => s + (Number(r.pnl_sol) || 0), 0)
+  const wins = (arr: typeof rows) => arr.filter(r => Number(r.pnl_sol) > 0).length
+  const wr = (arr: typeof rows) => arr.length > 0 ? wins(arr) / arr.length * 100 : 0
+
+  // Coût des sorties prématurées
+  let coutPremature = 0
+  let nbPremature = 0
+  for (const r of rows) {
+    const mcS = Number(r.market_cap_sortie ?? 0)
+    const mcE = Number(r.market_cap_entree ?? 0)
+    const ath = Number(r.ath_constate ?? 0)
+    const taille = Number(r.taille ?? 0)
+    if (ath > mcS && mcE > 0 && taille > 0) {
+      coutPremature += taille * ((ath / mcE) - (mcS / mcE))
+      nbPremature++
+    }
+  }
+
+  // Par narrative
+  const narrativeMap = new Map<string, { count: number; pnl: number; wins: number }>()
+  for (const r of rows) {
+    if (!r.meme_narrative) continue
+    const e = narrativeMap.get(r.meme_narrative) ?? { count: 0, pnl: 0, wins: 0 }
+    e.count++
+    e.pnl += Number(r.pnl_sol) || 0
+    if (Number(r.pnl_sol) > 0) e.wins++
+    narrativeMap.set(r.meme_narrative, e)
+  }
+  const parNarrative = Array.from(narrativeMap.entries())
+    .map(([narrative, d]) => ({ narrative, count: d.count, pnl: d.pnl, winrate: d.count > 0 ? d.wins / d.count * 100 : 0 }))
+    .sort((a, b) => b.pnl - a.pnl)
+
+  // Par conviction
+  const convMap = new Map<string, { count: number; pnl: number; wins: number }>()
+  for (const r of rows) {
+    const label = r.entry_qualite === 'A' ? 'Forte' : r.entry_qualite === 'B' ? 'Moyenne' : r.entry_qualite === 'C' ? 'Faible' : null
+    if (!label) continue
+    const e = convMap.get(label) ?? { count: 0, pnl: 0, wins: 0 }
+    e.count++
+    e.pnl += Number(r.pnl_sol) || 0
+    if (Number(r.pnl_sol) > 0) e.wins++
+    convMap.set(label, e)
+  }
+  const parConviction = ['Forte', 'Moyenne', 'Faible']
+    .filter(c => convMap.has(c))
+    .map(conviction => {
+      const d = convMap.get(conviction)!
+      return { conviction, count: d.count, pnl: d.pnl, winrate: d.count > 0 ? d.wins / d.count * 100 : 0 }
+    })
+
+  // Par tranche de MC (en k$, stocké en $ dans DB donc /1000)
+  function mcRange(mcFull: number | null): string {
+    if (!mcFull) return '?'
+    const k = mcFull / 1000
+    if (k < 10) return '<10k'
+    if (k < 20) return '10-20k'
+    if (k < 50) return '20-50k'
+    if (k < 100) return '50-100k'
+    return '>100k'
+  }
+  const mcMap = new Map<string, { count: number; pnl: number; wins: number }>()
+  for (const r of rows) {
+    const range = mcRange(r.market_cap_entree ? Number(r.market_cap_entree) : null)
+    if (range === '?') continue
+    const e = mcMap.get(range) ?? { count: 0, pnl: 0, wins: 0 }
+    e.count++
+    e.pnl += Number(r.pnl_sol) || 0
+    if (Number(r.pnl_sol) > 0) e.wins++
+    mcMap.set(range, e)
+  }
+  const mcOrder = ['<10k', '10-20k', '20-50k', '50-100k', '>100k']
+  const parMcRange = mcOrder.filter(r => mcMap.has(r)).map(range => {
+    const d = mcMap.get(range)!
+    return { range, count: d.count, pnl: d.pnl, winrate: d.count > 0 ? d.wins / d.count * 100 : 0 }
+  })
+
+  // Taux de complétion pré-trade
+  const avecPreTrade = rows.filter(r => r.pre_trade_saisi_a !== null && r.pre_trade_saisi_a !== undefined).length
+
+  return {
+    tradesAvecPlan: avecPlan.length,
+    tradesDansPlan: dansPlan.length,
+    tradesHorsPlan: horsPlan.length,
+    pnlDansPlan: pnlSum(dansPlan),
+    pnlHorsPlan: pnlSum(horsPlan),
+    winrateDansPlan: wr(dansPlan),
+    winrateHorsPlan: wr(horsPlan),
+    coutSortiesPrematurees: Math.round(coutPremature * 1000) / 1000,
+    nbSortiesPrematurees: nbPremature,
+    parNarrative,
+    parConviction,
+    parMcRange,
+    totalTrades: total,
+    tradesAvecPreTrade: avecPreTrade,
+    completionRate: total > 0 ? avecPreTrade / total * 100 : 0,
+  }
+}
+
+// ─── Stats du jour ────────────────────────────────────────────────────────────
+
+export async function getTodayStats(): Promise<{ count: number; pnl: number }> {
+  const sql = getSql()
+  const today = new Date().toISOString().slice(0, 10)
+  const rows = await sql`
+    SELECT pnl_sol FROM trades
+    WHERE draft IS NOT TRUE AND date = ${today}
+  `
+  return {
+    count: rows.length,
+    pnl: rows.reduce((s, r) => s + (Number(r.pnl_sol) || 0), 0),
+  }
 }
 
 export async function getChartData(filter?: string): Promise<ChartData> {
