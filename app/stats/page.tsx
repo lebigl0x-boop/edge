@@ -291,6 +291,50 @@ export default function StatsPage() {
             </Card>
           )}
 
+          {/* Re-buys */}
+          {stats.rebuys && stats.rebuys.tradesAvecRebuy > 0 && (
+            <Card title="Re-buys">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                {[
+                  { label: 'Avec re-buy', count: stats.rebuys.tradesAvecRebuy, pnl: stats.rebuys.pnlAvecRebuy },
+                  { label: 'Sans re-buy', count: (stats.totalTrades - stats.rebuys.tradesAvecRebuy), pnl: stats.rebuys.pnlSansRebuy },
+                ].map(item => (
+                  <div key={item.label} style={{
+                    padding: '12px 14px', borderRadius: 10,
+                    background: 'var(--surface-2)', border: '1px solid var(--border)',
+                  }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>{item.label} · {item.count}t</div>
+                    <div style={{ ...monoStyle, fontSize: 18, fontWeight: 700, color: pnlColor(item.pnl) }}>
+                      {fmtPnl(item.pnl)}
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>SOL</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontFamily: monoStyle.fontFamily }}>Par raison</div>
+                {stats.rebuys.parRaison.map(r => (
+                  <div key={r.raison} style={{
+                    display: 'grid', gridTemplateColumns: '1fr 40px 100px',
+                    gap: 10, padding: '7px 0', borderBottom: '1px solid var(--border)',
+                    alignItems: 'center',
+                  }}>
+                    <span style={{
+                      fontSize: 12,
+                      color: r.raison === 'Revenge / émotionnel' || r.raison === 'Moyenne à la baisse' ? 'var(--red)' : 'var(--text-2)',
+                      fontWeight: r.raison === 'Revenge / émotionnel' || r.raison === 'Moyenne à la baisse' ? 600 : 400,
+                    }}>{r.raison}</span>
+                    <span style={{ ...monoStyle, fontSize: 11, color: 'var(--text-3)' }}>{r.count}×</span>
+                    <span style={{ ...monoStyle, fontSize: 13, fontWeight: 700, color: pnlColor(r.pnl), textAlign: 'right' }}>
+                      {fmtPnl(r.pnl)}
+                      <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 3 }}>SOL</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {stats.totalTrades === 0 && (
             <div style={{
               textAlign: 'center', padding: 60,

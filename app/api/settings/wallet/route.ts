@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getWalletSettings, upsertWalletSettings, initSchema } from '@/lib/db'
+import { getWalletSettings, upsertWalletSettings, updateWalletTracking, initSchema } from '@/lib/db'
 import { registerHeliusWebhook, deleteHeliusWebhook } from '@/lib/helius'
 
 // Validation basique adresse Solana : base58, 32–44 chars
@@ -14,6 +14,8 @@ export async function GET() {
     return NextResponse.json({
       walletAddress: settings?.wallet_address ?? null,
       webhookId: settings?.helius_webhook_id ?? null,
+      trackingEnabled: settings?.tracking_enabled ?? false,
+      manualStack: settings?.manual_stack ?? null,
     })
   } catch (err) {
     console.error('[GET /api/settings/wallet]', err)
@@ -64,6 +66,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, walletAddress, webhookId })
   } catch (err) {
     console.error('[POST /api/settings/wallet]', err)
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    await initSchema()
+    const body = await req.json() as { trackingEnabled?: boolean; manualStack?: number | null }
+    await updateWalletTracking(body.trackingEnabled ?? false, body.manualStack ?? null)
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('[PATCH /api/settings/wallet]', err)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
   }
 }

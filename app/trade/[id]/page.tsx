@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { Trade } from '@/types/trade'
+import type { Rebuy } from '@/lib/db'
 import PnlNumber from '@/components/ui/PnlNumber'
 import NoteRich from '@/components/ui/NoteRich'
 import { monoFont, tokens } from '@/components/ui/tokens'
+
+const RAISONS = ['Nouveau catalyseur', 'Confirmation technique', 'Moyenne à la baisse', 'Revenge / émotionnel', 'Autre']
 
 function fmt(n: number | null, d = 2) {
   if (n === null || n === undefined) return '—'
@@ -79,12 +82,52 @@ export default function TradePage() {
   const [trade, setTrade] = useState<Trade | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
+  const [rebuys, setRebuys] = useState<Rebuy[]>([])
+  const [showRebuyForm, setShowRebuyForm] = useState(false)
+  const [rebuyWarning, setRebuyWarning] = useState(false)
+  const [savingRebuy, setSavingRebuy] = useState(false)
+  const [rebuyForm, setRebuyForm] = useState({ mc_rebuy: '', taille_ajoutee: '', raison: '', note: '' })
 
   useEffect(() => {
     fetch(`/api/trades/${id}`)
       .then(r => r.json())
       .then(t => { setTrade(t); setLoading(false) })
+    fetch(`/api/trades/${id}/rebuys`)
+      .then(r => r.json())
+      .then((d: Rebuy[]) => setRebuys(Array.isArray(d) ? d : []))
+      .catch(() => {})
   }, [id])
+
+  async function handleAddRebuy() {
+    const mc = parseFloat(rebuyForm.mc_rebuy)
+    const taille = parseFloat(rebuyForm.taille_ajoutee)
+    if (isNaN(mc) || mc <= 0 || isNaN(taille) || taille <= 0 || !rebuyForm.raison) return
+    setSavingRebuy(true)
+    try {
+      const res = await fetch(`/api/trades/${id}/rebuys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mc_rebuy: mc * 1000, taille_ajoutee: taille, raison: rebuyForm.raison, note: rebuyForm.note }),
+      })
+      if (res.ok) {
+        const newRebuys = await fetch(`/api/trades/${id}/rebuys`).then(r => r.json()) as Rebuy[]
+        setRebuys(newRebuys)
+        setRebuyForm({ mc_rebuy: '', taille_ajoutee: '', raison: '', note: '' })
+        setShowRebuyForm(false)
+        setRebuyWarning(false)
+      }
+    } finally {
+      setSavingRebuy(false)
+    }
+  }
+
+  function handleOpenRebuyForm() {
+    if (rebuys.length >= 1) {
+      setRebuyWarning(true)
+    } else {
+      setShowRebuyForm(true)
+    }
+  }
 
   async function handleDelete() {
     if (!confirm(`Supprimer le trade ${trade?.token} ?`)) return
@@ -264,6 +307,97 @@ export default function TradePage() {
                 </span>
               ))}
             </div>
+          </div>
+
+          {/* Re-buys */}
+          <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px 10px' }}>
+              <MonoLabel>Re-buys · {rebuys.length}</MonoLabel>
+              <button onClick={handleOpenRebuyForm} style={{
+                fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit',
+              }}>+ Re-buy</button>
+            </div>
+
+            {/* Avertissement au 2e re-buy */}
+            {rebuyWarning && (
+              <div style={{ margin: '0 16px 12px', padding: '14px', borderRadius: 10, background: 'oklch(0.68 0.21 22 / 0.08)', border: '1px solid oklch(0.68 0.21 22 / 0.25)' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--red)', marginBottom: 8 }}>⚠ Re-entrée multiple</div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 12 }}>
+                  Règle du cycle : une re-entrée max par narrative, sur nouveau catalyseur uniquement. Tu en es à {rebuys.length + 1}. Confirmer ?
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setRebuyWarning(false)} style={{ flex: 1, padding: '8px', fontSize: 12, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+                  <button onClick={() => { setRebuyWarning(false); setShowRebuyForm(true) }} style={{ flex: 1, padding: '8px', fontSize: 12, borderRadius: 8, background: 'oklch(0.68 0.21 22 / 0.12)', border: '1px solid oklch(0.68 0.21 22 / 0.35)', color: 'var(--red)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>Confirmer quand même</button>
+                </div>
+              </div>
+            )}
+
+            {/* Mini-formulaire */}
+            {showRebuyForm && (
+              <div style={{ margin: '0 16px 14px', padding: '14px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: monoFont }}>MC re-buy · k$</div>
+                    <input type="number" step="0.1" placeholder="45" value={rebuyForm.mc_rebuy}
+                      onChange={e => setRebuyForm(p => ({ ...p, mc_rebuy: e.target.value }))}
+                      style={{ width: '100%', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 10px', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: monoFont }}>Taille ajoutée · SOL</div>
+                    <input type="number" step="0.01" placeholder="0.3" value={rebuyForm.taille_ajoutee}
+                      onChange={e => setRebuyForm(p => ({ ...p, taille_ajoutee: e.target.value }))}
+                      style={{ width: '100%', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 10px', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: monoFont }}>Raison</div>
+                  <select value={rebuyForm.raison} onChange={e => setRebuyForm(p => ({ ...p, raison: e.target.value }))}
+                    style={{ width: '100%', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 10px', color: rebuyForm.raison ? 'var(--text)' : 'var(--text-4)', fontSize: 13, outline: 'none', fontFamily: 'inherit', cursor: 'pointer' }}>
+                    <option value="">— Choisir —</option>
+                    {RAISONS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: monoFont }}>Note (optionnel)</div>
+                  <input placeholder="Contexte…" value={rebuyForm.note}
+                    onChange={e => setRebuyForm(p => ({ ...p, note: e.target.value }))}
+                    style={{ width: '100%', background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 10px', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }} />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setShowRebuyForm(false)} style={{ flex: 1, padding: '8px', fontSize: 12, borderRadius: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+                  <button onClick={handleAddRebuy} disabled={savingRebuy} style={{ flex: 2, padding: '8px', fontSize: 12, fontWeight: 600, borderRadius: 8, background: 'var(--text)', color: 'var(--bg)', border: 'none', cursor: savingRebuy ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                    {savingRebuy ? '…' : 'Enregistrer le re-buy'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Liste des re-buys */}
+            {rebuys.length === 0 && !showRebuyForm && !rebuyWarning && (
+              <div style={{ padding: '0 18px 14px', fontSize: 12, color: 'var(--text-4)' }}>Aucun re-buy</div>
+            )}
+            {rebuys.map((r, i) => (
+              <div key={r.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '9px 18px', fontSize: 12, fontFamily: monoFont,
+                borderTop: i === 0 ? '1px solid var(--border)' : undefined,
+              }}>
+                <span style={{ color: 'var(--text-4)', fontSize: 10 }}>#{i + 1}</span>
+                <span style={{ color: 'var(--text-3)' }}>{r.mc_rebuy ? `${(r.mc_rebuy / 1000).toFixed(1)}k$` : '—'}</span>
+                <span style={{ color: 'var(--text-2)', fontWeight: 600 }}>{r.taille_ajoutee} SOL</span>
+                <span style={{
+                  fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                  background: r.raison === 'Revenge / émotionnel' || r.raison === 'Moyenne à la baisse'
+                    ? 'oklch(0.68 0.21 22 / 0.12)' : 'var(--surface-2)',
+                  color: r.raison === 'Revenge / émotionnel' || r.raison === 'Moyenne à la baisse'
+                    ? 'var(--red)' : 'var(--text-3)',
+                  border: `1px solid ${r.raison === 'Revenge / émotionnel' || r.raison === 'Moyenne à la baisse' ? 'oklch(0.68 0.21 22 / 0.25)' : 'var(--border)'}`,
+                }}>{r.raison}</span>
+                {r.note && <span style={{ color: 'var(--text-4)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.note}</span>}
+              </div>
+            ))}
           </div>
 
         </div>

@@ -158,6 +158,7 @@ export default function NouveauPreTrade() {
   const [showSizingAlert, setShowSizingAlert] = useState(false)
   const [pendingSubmit, setPendingSubmit] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
+  const [incompleteTrades, setIncompleteTrades] = useState<{ id: number; token: string; date: string }[] | null>(null)
 
   // Form state
   const [token, setToken] = useState('')
@@ -170,13 +171,30 @@ export default function NouveauPreTrade() {
   const [planSortie, setPlanSortie] = useState(PLAN_DEFAULT)
   const [taille, setTaille] = useState('')
 
-  // Load wallet balance
+  // Vérifier les trades à compléter (verrou si > 2)
   useEffect(() => {
-    const addr = localStorage.getItem(LS_WALLET)
-    if (!addr) return
-    fetch(`/api/solana?address=${encodeURIComponent(addr)}`)
+    fetch('/api/incomplete?cycle=cycle-1')
       .then(r => r.json())
-      .then((d: { sol?: number }) => { if (d.sol !== undefined) setWalletBalance(d.sol) })
+      .then((d: { id: number; token: string; date: string }[]) => setIncompleteTrades(Array.isArray(d) ? d : []))
+      .catch(() => setIncompleteTrades([]))
+  }, [])
+
+  // Load wallet balance (tracking ou stack manuel)
+  useEffect(() => {
+    fetch('/api/settings/wallet')
+      .then(r => r.json())
+      .then((s: { trackingEnabled?: boolean; manualStack?: number | null }) => {
+        if (!s.trackingEnabled) {
+          if (s.manualStack != null) setWalletBalance(s.manualStack)
+          return
+        }
+        const addr = localStorage.getItem(LS_WALLET)
+        if (!addr) return
+        fetch(`/api/solana?address=${encodeURIComponent(addr)}`)
+          .then(r => r.json())
+          .then((d: { sol?: number }) => { if (d.sol !== undefined) setWalletBalance(d.sol) })
+          .catch(() => {})
+      })
       .catch(() => {})
   }, [])
 
@@ -276,6 +294,49 @@ export default function NouveauPreTrade() {
 
   const today = new Date().toISOString().slice(0, 10)
   const convMap: Record<string, string> = { A: 'Forte', B: 'Moyenne', C: 'Faible' }
+
+  // Verrou : plus de 2 trades incomplets
+  const isBlocked = incompleteTrades !== null && incompleteTrades.length > 2
+  if (isBlocked) {
+    return (
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '20px 16px 80px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 2 }}>Pré-trade</div>
+          </div>
+          <Link href="/" style={{ color: 'var(--text-3)', fontSize: 12, textDecoration: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px' }}>← Retour</Link>
+        </div>
+        <div style={{
+          padding: '24px', borderRadius: 14,
+          background: 'oklch(0.68 0.21 22 / 0.08)',
+          border: '1px solid oklch(0.68 0.21 22 / 0.3)',
+        }}>
+          <div style={{ fontSize: 24, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 10, lineHeight: 1.3 }}>
+            Création bloquée
+          </div>
+          <div style={{ fontSize: 14, color: 'var(--text-2)', lineHeight: 1.65, marginBottom: 20 }}>
+            Complète tes trades précédents <strong>(ATH constaté + vente dans le plan)</strong> avant d&apos;en ouvrir un nouveau. Tu as {incompleteTrades.length} trades en attente.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {incompleteTrades.map(t => (
+              <Link key={t.id} href={`/drafts/${t.id}/complete`} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 16px', borderRadius: 10, textDecoration: 'none',
+                background: 'var(--surface-1)', border: '1px solid var(--border)',
+              }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{t.token}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: "'JetBrains Mono', monospace" }}>{t.date?.slice(5)}</span>
+                  <span style={{ fontSize: 12, color: 'var(--amber)' }}>Compléter →</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '20px 16px 80px' }}>

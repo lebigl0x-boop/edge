@@ -99,6 +99,21 @@ export async function initSchema() {
     SELECT '', 'cycle-1'
     WHERE NOT EXISTS (SELECT 1 FROM wallet_settings)
   `
+
+  // ── v2.1 ──────────────────────────────────────────────────────────────────────
+  await sql`ALTER TABLE wallet_settings ADD COLUMN IF NOT EXISTS tracking_enabled BOOLEAN DEFAULT false`
+  await sql`ALTER TABLE wallet_settings ADD COLUMN IF NOT EXISTS manual_stack DOUBLE PRECISION`
+  await sql`
+    CREATE TABLE IF NOT EXISTS rebuys (
+      id              SERIAL PRIMARY KEY,
+      trade_id        INTEGER NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      mc_rebuy        DOUBLE PRECISION NOT NULL,
+      taille_ajoutee  DOUBLE PRECISION NOT NULL,
+      raison          TEXT NOT NULL,
+      note            TEXT DEFAULT ''
+    )
+  `
 }
 
 // Fragment WHERE période (date)
@@ -232,6 +247,20 @@ export async function deleteTrade(id: number) {
   await sql`DELETE FROM trades WHERE id = ${id}`
 }
 
+export async function getIncompleteTrades(cycle?: string | null): Promise<{ id: number; token: string; date: string }[]> {
+  const sql = getSql()
+  const cf = cycleFragment(cycle)
+  const rows = await sql`
+    SELECT id, token, date FROM trades
+    WHERE draft IS NOT TRUE
+      AND pnl_sol IS NOT NULL
+      AND (ath_constate IS NULL OR vente_dans_plan IS NULL)
+      ${cf}
+    ORDER BY date DESC
+  `
+  return rows as { id: number; token: string; date: string }[]
+}
+
 export async function getStats(filter?: string, cycle?: string | null) {
   const sql = getSql()
   const wf = whereFragment(filter)
@@ -320,6 +349,8 @@ export interface WalletSettings {
   wallet_address: string
   helius_webhook_id: string | null
   created_at: string
+  tracking_enabled: boolean
+  manual_stack: number | null
 }
 
 export async function getWalletSettings(): Promise<WalletSettings | null> {
@@ -339,6 +370,15 @@ export async function updateLastTxSignature(signature: string): Promise<void> {
   await sql`
     UPDATE wallet_settings
     SET last_tx_signature = ${signature}
+    WHERE id = (SELECT id FROM wallet_settings ORDER BY id ASC LIMIT 1)
+  `
+}
+
+export async function updateWalletTracking(trackingEnabled: boolean, manualStack: number | null): Promise<void> {
+  const sql = getSql()
+  await sql`
+    UPDATE wallet_settings
+    SET tracking_enabled = ${trackingEnabled}, manual_stack = ${manualStack}
     WHERE id = (SELECT id FROM wallet_settings ORDER BY id ASC LIMIT 1)
   `
 }
@@ -544,6 +584,41 @@ export async function createPreTrade(data: PreTradeInput): Promise<number> {
   return rows[0].id as number
 }
 
+// ─── Re-buys ──────────────────────────────────────────────────────────────────
+
+export interface RebuyInput {
+  mc_rebuy: number
+  taille_ajoutee: number
+  raison: string
+  note?: string
+}
+
+export interface Rebuy {
+  id: number
+  trade_id: number
+  created_at: string
+  mc_rebuy: number
+  taille_ajoutee: number
+  raison: string
+  note: string
+}
+
+export async function getRebuysForTrade(tradeId: number): Promise<Rebuy[]> {
+  const sql = getSql()
+  const rows = await sql`SELECT * FROM rebuys WHERE trade_id = ${tradeId} ORDER BY created_at ASC`
+  return rows as Rebuy[]
+}
+
+export async function createRebuy(tradeId: number, data: RebuyInput): Promise<number> {
+  const sql = getSql()
+  const rows = await sql`
+    INSERT INTO rebuys (trade_id, mc_rebuy, taille_ajoutee, raison, note)
+    VALUES (${tradeId}, ${data.mc_rebuy}, ${data.taille_ajoutee}, ${data.raison}, ${data.note ?? ''})
+    RETURNING id
+  `
+  return rows[0].id as number
+}
+
 // ─── Stats avancées v2 ────────────────────────────────────────────────────────
 
 export interface AdvancedStats {
@@ -568,6 +643,13 @@ export interface AdvancedStats {
   totalTrades: number
   tradesAvecPreTrade: number
   completionRate: number
+  // Re-buys
+  rebuys: {
+    tradesAvecRebuy: number
+    pnlAvecRebuy: number
+    pnlSansRebuy: number
+    parRaison: { raison: string; count: number; pnl: number }[]
+  }
 }
 
 export async function getAdvancedStats(filter?: string, cycle?: string | null): Promise<AdvancedStats> {
@@ -669,6 +751,27 @@ export async function getAdvancedStats(filter?: string, cycle?: string | null): 
   // Taux de complétion pré-trade
   const avecPreTrade = rows.filter(r => r.pre_trade_saisi_a !== null && r.pre_trade_saisi_a !== undefined).length
 
+  // Re-buy stats
+  const rebuyTradeRows = await sql`
+    SELECT t.id, t.pnl_sol, COUNT(r.id)::int AS rebuy_count
+    FROM trades t
+    LEFT JOIN rebuys r ON r.trade_id = t.id
+    WHERE t.draft IS NOT TRUE ${wf} ${cf}
+    GROUP BY t.id, t.pnl_sol
+  `
+  const avecRebuy = rebuyTradeRows.filter(r => Number(r.rebuy_count) > 0)
+  const sansRebuy = rebuyTradeRows.filter(r => Number(r.rebuy_count) === 0)
+  const pnlSum2 = (arr: typeof rebuyTradeRows) => arr.reduce((s, r) => s + (Number(r.pnl_sol) || 0), 0)
+
+  const rebuyRaisonRows = await sql`
+    SELECT r.raison, COUNT(*)::int AS count, SUM(t.pnl_sol)::float AS pnl
+    FROM rebuys r
+    JOIN trades t ON t.id = r.trade_id
+    WHERE t.draft IS NOT TRUE ${wf} ${cf}
+    GROUP BY r.raison
+    ORDER BY count DESC
+  `
+
   return {
     tradesAvecPlan: avecPlan.length,
     tradesDansPlan: dansPlan.length,
@@ -685,6 +788,16 @@ export async function getAdvancedStats(filter?: string, cycle?: string | null): 
     totalTrades: total,
     tradesAvecPreTrade: avecPreTrade,
     completionRate: total > 0 ? avecPreTrade / total * 100 : 0,
+    rebuys: {
+      tradesAvecRebuy: avecRebuy.length,
+      pnlAvecRebuy: pnlSum2(avecRebuy),
+      pnlSansRebuy: pnlSum2(sansRebuy),
+      parRaison: rebuyRaisonRows.map(r => ({
+        raison: r.raison as string,
+        count: Number(r.count),
+        pnl: Number(r.pnl ?? 0),
+      })),
+    },
   }
 }
 

@@ -13,27 +13,6 @@ function useForm(init: Record<string, Val>) {
   return { form, set, setAll: setForm }
 }
 
-function Pills({ options, value, onChange, colorClass }: {
-  options: string[]
-  value: string
-  onChange: (v: string) => void
-  colorClass?: (o: string) => string
-}) {
-  return (
-    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-      {options.map(o => {
-        const active = value === o
-        const cls = active ? (colorClass ? colorClass(o) : 'pill-blue') : ''
-        return (
-          <button key={o} type="button" className={`radio-pill ${cls}`} onClick={() => onChange(active ? '' : o)}>
-            {o}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 function Toggle({ label, sub, value, onChange }: { label: string; sub?: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="toggle-row" style={{ alignItems: sub ? 'flex-start' : 'center' }}>
@@ -46,10 +25,19 @@ function Toggle({ label, sub, value, onChange }: { label: string; sub?: string; 
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, locked }: { title: string; children: React.ReactNode; locked?: boolean }) {
   return (
-    <div className="form-section">
-      <div className="section-label">{title}</div>
+    <div className="form-section" style={locked ? { opacity: 0.65, pointerEvents: 'none' } : undefined}>
+      <div className="section-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {title}
+        {locked && (
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase',
+            color: 'var(--text-4)', border: '1px solid var(--border)', borderRadius: 4,
+            padding: '2px 6px', fontFamily: "'JetBrains Mono', monospace",
+          }}>Verrouillé</span>
+        )}
+      </div>
       {children}
     </div>
   )
@@ -67,15 +55,44 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-const convictionMap: Record<string, string> = { Forte: 'A', Moyenne: 'B', Faible: 'C' }
-const FEES_KEY = 'edge_fees'
+function ReadonlyValue({ label, value, hint }: { label: string; value: string | null | undefined; hint?: string }) {
+  return (
+    <div className="field-wrap">
+      <label className="field-label">
+        {label}
+        {hint && <span style={{ fontWeight: 400, color: 'rgba(255,255,255,0.3)', marginLeft: 5 }}>{hint}</span>}
+      </label>
+      <div style={{
+        padding: '10px 12px', borderRadius: 8,
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        fontSize: 14, color: 'rgba(255,255,255,0.5)',
+        fontFamily: 'inherit', lineHeight: 1.5,
+        minHeight: 38,
+      }}>
+        {value || <span style={{ color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>—</span>}
+      </div>
+    </div>
+  )
+}
 
-const EMPTY: Record<string, Val> = {
-  date: '', heure_entree: '', token: '',
+const FEES_KEY = 'edge_fees'
+const NUM_FIELDS = ['market_cap_entree', 'market_cap_sortie', 'taille', 'pnl_sol', 'ath_constate']
+
+const convictionLabel = (q: string | null | undefined) =>
+  q === 'A' ? 'Forte' : q === 'B' ? 'Moyenne' : q === 'C' ? 'Faible' : '—'
+
+function formatMCDisplay(fullUsd: number | null | undefined): string {
+  if (fullUsd == null) return '—'
+  return `${(fullUsd / 1000).toFixed(1)} k$`
+}
+
+const POST_EMPTY: Record<string, Val> = {
+  date: '', heure_entree: '',
   market_cap_entree: '', market_cap_sortie: '',
-  taille: '', pnl_sol: '',
-  meme_narrative: '', entry_qualite: '',
-  r1_respectee: false, r2_respectee: false, r4_respectee: false,
+  pnl_sol: '',
+  ath_constate: '',
+  vente_dans_plan: null,
   sl_touche: false, coupe_bon_moment: false, coin_lent: false,
   erreur: '', erreur_autre: '', trade_aplus: false, bien_fait: '',
 }
@@ -85,33 +102,29 @@ export default function EditTrade() {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [trade, setTrade] = useState<Trade | null>(null)
   const [fees, setFees] = useState({ prio: 0.001, tip: 0.001 })
-  const { form, set, setAll } = useForm(EMPTY)
+  const { form, set, setAll } = useForm(POST_EMPTY)
+  const pnlManual = useRef(true)
 
   useEffect(() => {
     const saved = localStorage.getItem(FEES_KEY)
     if (saved) { try { setFees(JSON.parse(saved)) } catch {} }
   }, [])
 
-  // Load existing trade
   useEffect(() => {
     fetch(`/api/trades/${id}`)
       .then(r => r.json())
       .then((t: Trade) => {
+        setTrade(t)
         setAll({
           date: t.date ?? '',
           heure_entree: t.heure_entree ?? '',
-          token: t.token ?? '',
-          // MC stored as full $, display in k$
           market_cap_entree: t.market_cap_entree != null ? String(t.market_cap_entree / 1000) : '',
           market_cap_sortie: t.market_cap_sortie != null ? String(t.market_cap_sortie / 1000) : '',
-          taille: t.taille != null ? String(t.taille) : '',
           pnl_sol: t.pnl_sol != null ? String(t.pnl_sol) : '',
-          meme_narrative: t.meme_narrative ?? '',
-          entry_qualite: t.entry_qualite ?? '',
-          r1_respectee: Boolean(t.r1_respectee),
-          r2_respectee: Boolean(t.r2_respectee),
-          r4_respectee: Boolean(t.r4_respectee),
+          ath_constate: t.ath_constate != null ? String(t.ath_constate / 1000) : '',
+          vente_dans_plan: t.vente_dans_plan ?? null,
           sl_touche: Boolean(t.sl_touche),
           coupe_bon_moment: Boolean(t.coupe_bon_moment),
           coin_lent: Boolean(t.coin_lent),
@@ -120,7 +133,7 @@ export default function EditTrade() {
           trade_aplus: Boolean(t.trade_aplus),
           bien_fait: t.bien_fait ?? '',
         })
-        pnlManual.current = true // don't auto-override loaded PnL
+        pnlManual.current = true
         setLoaded(true)
       })
   }, [id])
@@ -128,17 +141,14 @@ export default function EditTrade() {
   const { autoPct, autoPnlSol } = useMemo(() => {
     const mcE = parseFloat(form.market_cap_entree as string)
     const mcS = parseFloat(form.market_cap_sortie as string)
-    const taille = parseFloat(form.taille as string)
+    const taille = trade?.taille ?? 0
     if (isNaN(mcE) || isNaN(mcS) || mcE <= 0) return { autoPct: null, autoPnlSol: null }
     const pct = ((mcS - mcE) / mcE) * 100
-    if (isNaN(taille) || taille <= 0) return { autoPct: pct, autoPnlSol: null }
+    if (!taille || taille <= 0) return { autoPct: pct, autoPnlSol: null }
     const totalFees = (fees.prio + fees.tip) * 2
     return { autoPct: pct, autoPnlSol: taille * (mcS - mcE) / mcE - totalFees }
-  }, [form.market_cap_entree, form.market_cap_sortie, form.taille, fees])
+  }, [form.market_cap_entree, form.market_cap_sortie, trade?.taille, fees])
 
-  const convictionLabel = Object.entries(convictionMap).find(([, v]) => v === form.entry_qualite)?.[0] ?? ''
-  const pnlManual = useRef(true)
-  const NUM_FIELDS = ['market_cap_entree', 'market_cap_sortie', 'taille', 'pnl_sol']
   const totalFees = (fees.prio + fees.tip) * 2
   const hasPnlPreview = autoPct !== null || autoPnlSol !== null
 
@@ -148,11 +158,15 @@ export default function EditTrade() {
     try {
       const payload: Record<string, Val> = {}
       for (const [k, v] of Object.entries(form)) {
-        if (v === '' || v === null) continue
+        if (v === '' || v === undefined) continue
+        if (k === 'vente_dans_plan') {
+          if (v !== null) payload[k] = v
+          continue
+        }
         if (NUM_FIELDS.includes(k)) {
           const n = parseFloat(v as string)
           if (!isNaN(n)) {
-            payload[k] = (k === 'market_cap_entree' || k === 'market_cap_sortie') ? n * 1000 : n
+            payload[k] = (k === 'market_cap_entree' || k === 'market_cap_sortie' || k === 'ath_constate') ? n * 1000 : n
           }
         } else {
           payload[k] = v
@@ -176,34 +190,114 @@ export default function EditTrade() {
     }
   }
 
-  if (!loaded) {
+  if (!loaded || !trade) {
     return <div style={{ maxWidth: 640, margin: '0 auto', padding: '40px 20px', color: 'rgba(255,255,255,0.3)' }}>Chargement...</div>
   }
+
+  const isV1 = trade.cycle === 'v1-historique'
+
+  // ── V1-historique : tout en lecture seule ─────────────────────────────────
+  if (isV1) {
+    return (
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 20px 60px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+          <Link href={`/trade/${id}`} className="btn-ghost">← Retour</Link>
+          <h1 style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
+            {trade.token} <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '1rem' }}>v1-historique</span>
+          </h1>
+        </div>
+        <div style={{
+          padding: '14px 18px', marginBottom: 24, borderRadius: 10,
+          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+          fontSize: 13, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5,
+        }}>
+          Ce trade appartient au cycle v1-historique — il est en <strong style={{ color: 'rgba(255,255,255,0.6)' }}>lecture seule</strong> et ne peut pas être modifié.
+          Pour voir le détail, utilisez la <Link href={`/trade/${id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>page de visualisation</Link>.
+        </div>
+        <Link href={`/trade/${id}`} className="btn-ghost">Voir le trade →</Link>
+      </div>
+    )
+  }
+
+  // ── V2 : pré-trade verrouillé + post-trade éditable ───────────────────────
+  const convLbl = convictionLabel(trade.entry_qualite)
+  const convColor = trade.entry_qualite === 'A' ? 'var(--green)' : trade.entry_qualite === 'B' ? 'var(--amber)' : trade.entry_qualite === 'C' ? 'var(--red)' : 'rgba(255,255,255,0.4)'
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 20px 60px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
         <Link href={`/trade/${id}`} className="btn-ghost">← Retour</Link>
         <h1 style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
-          Modifier — <span style={{ color: 'rgba(255,255,255,0.5)' }}>{form.token as string}</span>
+          Modifier — <span style={{ color: 'rgba(255,255,255,0.5)' }}>{trade.token}</span>
         </h1>
       </div>
 
+      {/* ── Pré-trade verrouillé ── */}
+      <div style={{
+        marginBottom: 24, borderRadius: 12,
+        border: '1px solid rgba(255,255,255,0.06)',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: 'rgba(255,255,255,0.02)',
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', fontFamily: "'JetBrains Mono', monospace" }}>
+            Plan pré-trade
+          </span>
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase',
+            color: 'rgba(255,255,255,0.25)', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 4, padding: '2px 6px', fontFamily: "'JetBrains Mono', monospace",
+          }}>🔒 Verrouillé</span>
+        </div>
+
+        <div style={{ padding: '16px', opacity: 0.7 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>Narrative</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{trade.meme_narrative || '—'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>Conviction</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: convColor }}>{convLbl}</div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>Pourquoi ça pump</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>{trade.pourquoi_pump || '—'}</div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>MC cible</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{formatMCDisplay(trade.mc_cible)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>MC invalidation</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{formatMCDisplay(trade.mc_invalidation)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>Taille initiale</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{trade.taille != null ? `${trade.taille} SOL` : '—'}</div>
+            </div>
+          </div>
+
+          {trade.plan_sortie && (
+            <div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>Plan de sortie</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>{trade.plan_sortie}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Post-trade éditable ── */}
       <form onSubmit={handleSubmit}>
 
-        {/* 1. Le Trade */}
-        <Section title="Le Trade">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Token">
-              <input
-                className="input-field" placeholder="WIF"
-                value={form.token as string}
-                onChange={e => set('token', e.target.value.toUpperCase())}
-                required
-              />
-            </Field>
-            </div>
-
+        <Section title="Résultats réels">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Date">
               <input type="date" className="input-field" value={form.date as string} onChange={e => set('date', e.target.value)} required />
@@ -214,7 +308,7 @@ export default function EditTrade() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="MC Entrée" hint="(k$)">
+            <Field label="MC Entrée réelle" hint="(k$)">
               <input type="number" step="0.1" className="input-field" placeholder="29.9"
                 value={form.market_cap_entree as string}
                 onChange={e => set('market_cap_entree', e.target.value)} />
@@ -226,32 +320,22 @@ export default function EditTrade() {
             </Field>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Taille" hint="(SOL)">
-              <input type="number" step="0.01" className="input-field" placeholder="1.5"
-                value={form.taille as string}
-                onChange={e => set('taille', e.target.value)} />
-            </Field>
-            <Field label="PnL" hint={!pnlManual.current && autoPnlSol !== null ? '(calculé)' : '(SOL)'}>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="number" step="0.001" className="input-field" placeholder="—"
-                  value={form.pnl_sol as string}
-                  onChange={e => { pnlManual.current = true; set('pnl_sol', e.target.value) }}
-                  style={{ paddingRight: pnlManual.current && autoPnlSol !== null ? 52 : undefined }}
-                />
-                {pnlManual.current && autoPnlSol !== null && (
-                  <button
-                    type="button"
-                    onClick={() => { pnlManual.current = false; set('pnl_sol', String(Math.round(autoPnlSol * 1000) / 1000)) }}
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: '0.65rem', color: '#0a84ff', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 4px' }}
-                  >
-                    reset
-                  </button>
-                )}
-              </div>
-            </Field>
-          </div>
+          <Field label="PnL" hint={!pnlManual.current && autoPnlSol !== null ? '(calculé)' : '(SOL)'}>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="number" step="0.001" className="input-field" placeholder="—"
+                value={form.pnl_sol as string}
+                onChange={e => { pnlManual.current = true; set('pnl_sol', e.target.value) }}
+                style={{ paddingRight: pnlManual.current && autoPnlSol !== null ? 52 : undefined }}
+              />
+              {pnlManual.current && autoPnlSol !== null && (
+                <button type="button"
+                  onClick={() => { pnlManual.current = false; set('pnl_sol', String(Math.round(autoPnlSol * 1000) / 1000)) }}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: '0.65rem', color: '#0a84ff', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 4px' }}
+                >reset</button>
+              )}
+            </div>
+          </Field>
 
           {hasPnlPreview && (
             <div style={{ marginTop: 4, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -273,56 +357,50 @@ export default function EditTrade() {
               )}
             </div>
           )}
-        </Section>
 
-        {/* 2. L'Edge */}
-        <Section title="L'Edge">
-          <Field label="Narrative">
-            <select className="input-field" value={form.meme_narrative as string} onChange={e => set('meme_narrative', e.target.value)}>
-              <option value="">— Choisir —</option>
-              <option value="Animaux">Animaux</option>
-              <option value="Internet meme">Internet meme</option>
-              <option value="Crypto culture">Crypto culture</option>
-              <option value="AI">AI</option>
-              <option value="Tech Narrative">Tech Narrative</option>
-              <option value="Meta narrative">Meta narrative</option>
-              <option value="Political">Political</option>
-              <option value="Societal">Societal</option>
-              <option value="Influencer">Influencer</option>
-              <option value="Trend">Trend</option>
-              <option value="Tweet Play">Tweet Play</option>
-            </select>
-          </Field>
-          <Field label="Conviction">
-            <Pills
-              options={['Forte', 'Moyenne', 'Faible']}
-              value={convictionLabel}
-              onChange={v => set('entry_qualite', convictionMap[v] ?? '')}
-              colorClass={o => o === 'Forte' ? 'pill-green' : o === 'Moyenne' ? 'pill-orange' : 'pill-red'}
-            />
+          <Field label="ATH MC constaté" hint="(k$)">
+            <input type="number" step="0.1" className="input-field" placeholder="350"
+              value={form.ath_constate as string}
+              onChange={e => set('ath_constate', e.target.value)} />
           </Field>
         </Section>
 
-        {/* 3. Discipline */}
-        <Section title="Discipline">
-          <Toggle label="R1 — Narrative comprise" sub="Je comprends le meme, pourquoi les gens le partageraient, et il est simple à expliquer." value={form.r1_respectee as boolean} onChange={v => set('r1_respectee', v)} />
-          <Toggle label="R2 — ATH potentiel estimé" sub="J'ai une idée claire du risk/reward et du market cap cible avant d'entrer." value={form.r2_respectee as boolean} onChange={v => set('r2_respectee', v)} />
-          <Toggle label="R4 — Perte limitée à -20%" sub="J'ai respecté mon stop loss, même si le coin a pumpé après." value={form.r4_respectee as boolean} onChange={v => set('r4_respectee', v)} />
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 0' }} />
+        <Section title="Respect du plan">
+          <Field label="Vente dans le plan ?">
+            <div style={{ display: 'flex', gap: 10 }}>
+              {[{ v: true, label: 'Oui', color: '#30d158' }, { v: false, label: 'Non / Hors plan', color: '#ff453a' }].map(opt => (
+                <button key={String(opt.v)} type="button"
+                  onClick={() => set('vente_dans_plan', form.vente_dans_plan === opt.v ? null : opt.v)}
+                  className={`radio-pill`}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit', border: 'none',
+                    background: form.vente_dans_plan === opt.v
+                      ? (opt.v ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)')
+                      : 'rgba(255,255,255,0.04)',
+                    color: form.vente_dans_plan === opt.v ? opt.color : 'rgba(255,255,255,0.4)',
+                    outline: form.vente_dans_plan === opt.v ? `1px solid ${opt.color}40` : '1px solid rgba(255,255,255,0.07)',
+                  }}
+                >{opt.label}</button>
+              ))}
+            </div>
+          </Field>
+        </Section>
+
+        <Section title="Gestion & Review">
           <Toggle label="SL touché" value={form.sl_touche as boolean} onChange={v => set('sl_touche', v)} />
           <Toggle label="Coupé au bon moment" value={form.coupe_bon_moment as boolean} onChange={v => set('coupe_bon_moment', v)} />
           <Toggle label="Coin lent / stagné" value={form.coin_lent as boolean} onChange={v => set('coin_lent', v)} />
-        </Section>
-
-        {/* 4. Review */}
-        <Section title="Review">
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '8px 0' }} />
           <Field label="Erreur">
-            <Pills
-              options={['Aucune', 'FOMO', 'Overtrade', 'Mauvais sizing', 'Pas de SL', 'Exit trop tôt', 'Autre']}
-              value={form.erreur as string}
-              onChange={v => set('erreur', v)}
-              colorClass={o => o === 'Aucune' ? 'pill-green' : o === 'Exit trop tôt' ? 'pill-orange' : 'pill-red'}
-            />
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+              {['Aucune', 'FOMO', 'Overtrade', 'Mauvais sizing', 'Pas de SL', 'Exit trop tôt', 'Autre'].map(o => (
+                <button key={o} type="button"
+                  className={`radio-pill ${form.erreur === o ? (o === 'Aucune' ? 'pill-green' : o === 'Exit trop tôt' ? 'pill-orange' : 'pill-red') : ''}`}
+                  onClick={() => set('erreur', form.erreur === o ? '' : o)}
+                >{o}</button>
+              ))}
+            </div>
             {form.erreur === 'Autre' && (
               <input className="input-field" placeholder="Précise..." value={form.erreur_autre as string}
                 onChange={e => set('erreur_autre', e.target.value)} style={{ marginTop: 10 }} />

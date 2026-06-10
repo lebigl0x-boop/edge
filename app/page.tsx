@@ -64,14 +64,24 @@ export default function Dashboard() {
   const [draftCount, setDraftCount] = useState(0)
   const [todayStats, setTodayStats] = useState<TodayStats | null>(null)
   const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const [incompleteTrades, setIncompleteTrades] = useState<{ id: number; token: string; date: string }[]>([])
 
   // Wallet balance pour le calcul du stop -10%
   useEffect(() => {
-    const addr = localStorage.getItem('sol_wallet_address')
-    if (!addr) return
-    fetch(`/api/solana?address=${encodeURIComponent(addr)}`)
+    fetch('/api/settings/wallet')
       .then(r => r.json())
-      .then((d: { sol?: number }) => { if (d.sol !== undefined) setWalletBalance(d.sol) })
+      .then((s: { trackingEnabled?: boolean; manualStack?: number | null }) => {
+        if (!s.trackingEnabled) {
+          if (s.manualStack != null) setWalletBalance(s.manualStack)
+          return
+        }
+        const addr = localStorage.getItem('sol_wallet_address')
+        if (!addr) return
+        fetch(`/api/solana?address=${encodeURIComponent(addr)}`)
+          .then(r => r.json())
+          .then((d: { sol?: number }) => { if (d.sol !== undefined) setWalletBalance(d.sol) })
+          .catch(() => {})
+      })
       .catch(() => {})
   }, [])
 
@@ -90,6 +100,15 @@ export default function Dashboard() {
   useEffect(() => {
     fetch('/api/months').then(r => r.json()).then(setMonths).catch(() => {})
   }, [])
+
+  // Trades incomplets (post-trade à compléter)
+  useEffect(() => {
+    if (cycle === 'all') return
+    fetch(`/api/incomplete?cycle=${cycle}`)
+      .then(r => r.json())
+      .then((d: { id: number; token: string; date: string }[]) => setIncompleteTrades(Array.isArray(d) ? d : []))
+      .catch(() => {})
+  }, [cycle])
 
   useEffect(() => {
     setLoading(true)
@@ -210,6 +229,35 @@ export default function Dashboard() {
           </div>
           <span className="mono" style={{ fontSize: 12, color: 'var(--amber)', opacity: 0.7 }}>Voir →</span>
         </Link>
+      )}
+
+      {/* Bandeau trades à compléter */}
+      {incompleteTrades.length > 0 && (
+        <div style={{
+          padding: '10px 16px', marginBottom: 12,
+          background: 'oklch(0.78 0.14 70 / 0.08)',
+          border: '1px solid oklch(0.78 0.14 70 / 0.25)',
+          borderRadius: 10,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: incompleteTrades.length > 0 ? 8 : 0 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--amber)', boxShadow: '0 0 8px oklch(0.78 0.14 70 / 0.6)', flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)' }}>
+              {incompleteTrades.length} trade{incompleteTrades.length > 1 ? 's' : ''} à compléter — ATH constaté + vente dans le plan
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingLeft: 18 }}>
+            {incompleteTrades.map(t => (
+              <Link key={t.id} href={`/drafts/${t.id}/complete`} style={{
+                fontSize: 11, color: 'var(--amber)', textDecoration: 'none',
+                border: '1px solid oklch(0.78 0.14 70 / 0.3)',
+                borderRadius: 6, padding: '3px 8px',
+                fontFamily: "'JetBrains Mono', monospace", fontWeight: 600,
+              }}>
+                {t.token} {t.date?.slice(5)}
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Today counter */}

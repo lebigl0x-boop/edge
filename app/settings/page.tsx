@@ -35,14 +35,21 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(true)
   const [removing, setRemoving] = useState(false)
+  // Stack & tracking
+  const [trackingEnabled, setTrackingEnabled] = useState(false)
+  const [manualStack, setManualStack] = useState('')
+  const [savingStack, setSavingStack] = useState(false)
+  const [stackSuccess, setStackSuccess] = useState('')
 
   useEffect(() => {
     fetch('/api/settings/wallet')
       .then(r => r.json())
-      .then((d: { walletAddress: string | null; webhookId: string | null }) => {
+      .then((d: { walletAddress: string | null; webhookId: string | null; trackingEnabled: boolean; manualStack: number | null }) => {
         setCurrentWallet(d.walletAddress || null)
         setWebhookId(d.webhookId || null)
         if (d.walletAddress) setWalletInput(d.walletAddress)
+        setTrackingEnabled(d.trackingEnabled ?? false)
+        setManualStack(d.manualStack != null ? String(d.manualStack) : '')
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -92,6 +99,23 @@ export default function SettingsPage() {
       setError('Erreur lors de la suppression.')
     } finally {
       setRemoving(false)
+    }
+  }
+
+  async function handleSaveStack() {
+    setSavingStack(true)
+    setStackSuccess('')
+    try {
+      const stack = manualStack ? parseFloat(manualStack) : null
+      await fetch('/api/settings/wallet', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackingEnabled, manualStack: stack }),
+      })
+      setStackSuccess('Sauvegardé.')
+      setTimeout(() => setStackSuccess(''), 2000)
+    } finally {
+      setSavingStack(false)
     }
   }
 
@@ -262,6 +286,78 @@ export default function SettingsPage() {
                 )}
               </>
             )}
+          </div>
+        </div>
+
+        {/* Stack & Tracking */}
+        <div style={{
+          marginTop: 16,
+          background: 'var(--surface-1)', border: '1px solid var(--border)',
+          borderRadius: 14, overflow: 'hidden',
+        }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>Stack & Sizing</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Référence pour le garde-fou de sizing (10 % du stack)</div>
+          </div>
+          <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Toggle tracking */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>Tracking wallet actif</div>
+                <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 2 }}>
+                  Récupère la balance via RPC Solana. Off par défaut.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTrackingEnabled(v => !v)}
+                style={{
+                  width: 44, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+                  background: trackingEnabled ? 'var(--green)' : 'var(--surface-3)',
+                  position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 3, left: trackingEnabled ? 21 : 3,
+                  width: 20, height: 20, borderRadius: '50%',
+                  background: 'white', transition: 'left 0.2s',
+                }} />
+              </button>
+            </div>
+
+            {/* Stack manuel */}
+            <div>
+              <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>
+                Stack actuel (SOL) — saisi manuellement
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="number" step="0.01" placeholder="ex. 12.50"
+                  value={manualStack}
+                  onChange={e => setManualStack(e.target.value)}
+                  style={{ ...inputStyle, flex: 1 }}
+                />
+                <button
+                  onClick={handleSaveStack}
+                  disabled={savingStack}
+                  style={{
+                    background: 'var(--text)', color: 'var(--bg)',
+                    border: 'none', borderRadius: 8,
+                    padding: '10px 16px', fontSize: 13, fontWeight: 600,
+                    cursor: savingStack ? 'not-allowed' : 'pointer',
+                    opacity: savingStack ? 0.5 : 1,
+                    whiteSpace: 'nowrap', fontFamily: 'inherit',
+                  }}
+                >
+                  {savingStack ? '…' : 'Sauvegarder'}
+                </button>
+              </div>
+              {stackSuccess && (
+                <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 6 }}>{stackSuccess}</div>
+              )}
+            </div>
+
           </div>
         </div>
 
