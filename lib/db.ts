@@ -250,10 +250,12 @@ export async function deleteTrade(id: number) {
 export async function getIncompleteTrades(cycle?: string | null): Promise<{ id: number; token: string; date: string }[]> {
   const sql = getSql()
   const cf = cycleFragment(cycle)
+  // Seulement les trades qui ont eu un pré-trade saisi (flux v2) — pas les anciens trades sans ces champs
   const rows = await sql`
     SELECT id, token, date FROM trades
     WHERE draft IS NOT TRUE
       AND pnl_sol IS NOT NULL
+      AND pre_trade_saisi_a IS NOT NULL
       AND (ath_constate IS NULL OR vente_dans_plan IS NULL)
       ${cf}
     ORDER BY date DESC
